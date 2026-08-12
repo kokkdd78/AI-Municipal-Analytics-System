@@ -9,6 +9,18 @@ export type ReportStatus = (typeof REPORT_STATUSES)[number]
 export const REPORT_SEVERITIES = ["low", "medium", "high"] as const
 export type ReportSeverity = (typeof REPORT_SEVERITIES)[number]
 
+export const ATTACHMENT_KINDS = ["report-photo", "completion-evidence", "avatar"] as const
+export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number]
+
+export const SUGGESTION_STATUSES = ["Under Review", "Approved", "Rejected"] as const
+export type SuggestionStatus = (typeof SUGGESTION_STATUSES)[number]
+
+export const WORK_ORDER_STATUSES = ["pending", "active", "completed"] as const
+export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number]
+
+export const WORK_ORDER_PRIORITIES = ["Low", "Medium", "High"] as const
+export type WorkOrderPriority = (typeof WORK_ORDER_PRIORITIES)[number]
+
 export interface Coordinates {
   lat: number
   lng: number
@@ -19,7 +31,7 @@ export interface Attachment {
   name: string
   mimeType: string
   url: string
-  kind: "report-photo" | "completion-evidence" | "avatar"
+  kind: AttachmentKind
 }
 
 export interface MunicipalUser {
@@ -65,4 +77,3 @@ export interface MapReport {
   votes: number
   attachments?: Attachment[]
 }
-

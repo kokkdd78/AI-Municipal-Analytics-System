@@ -4,6 +4,7 @@ node_modules/
 # Local environment files
 .env
 .env.*
+!.env.example
 
 # Test and coverage output
 coverage/
@@ -13,3 +14,6 @@ coverage/
 # Local tool caches
 .eslintcache
 *.tsbuildinfo
+
+# Generated Prisma Client
+generated/prisma/

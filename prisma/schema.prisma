@@ -1,0 +1,323 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  Citizen
+  Manager
+  Crew
+}
+
+enum ReportStatus {
+  PENDING     @map("pending")
+  IN_PROGRESS @map("in-progress")
+  RESOLVED    @map("resolved")
+}
+
+enum ReportSeverity {
+  LOW    @map("low")
+  MEDIUM @map("medium")
+  HIGH   @map("high")
+}
+
+enum AttachmentKind {
+  REPORT_PHOTO        @map("report-photo")
+  COMPLETION_EVIDENCE @map("completion-evidence")
+  AVATAR              @map("avatar")
+}
+
+enum SuggestionStatus {
+  UNDER_REVIEW @map("Under Review")
+  APPROVED     @map("Approved")
+  REJECTED     @map("Rejected")
+}
+
+enum WorkOrderStatus {
+  PENDING   @map("pending")
+  ACTIVE    @map("active")
+  COMPLETED @map("completed")
+}
+
+enum WorkOrderPriority {
+  LOW    @map("Low")
+  MEDIUM @map("Medium")
+  HIGH   @map("High")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String?  @unique
+  employeeId   String?  @unique
+  passwordHash String?
+  role         UserRole
+  avatarUrl    String?
+  districtId   String?
+  departmentId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  district                District?                @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  department              Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  reports                 Report[]
+  suggestions             Suggestion[]
+  reportVotes             Vote[]
+  suggestionVotes         SuggestionVote[]
+  createdWorkOrders       WorkOrder[]              @relation("WorkOrderCreatedBy")
+  crewAssignments         CrewAssignment[]         @relation("CrewMemberAssignments")
+  assignedCrewAssignments CrewAssignment[]         @relation("CrewAssignmentManager")
+  uploadedAttachments     Attachment[]
+  reportStatusChanges     StatusHistory[]
+  workOrderStatusChanges  WorkOrderStatusHistory[]
+  auditLogs               AuditLog[]
+
+  @@index([role])
+  @@index([districtId])
+  @@index([departmentId])
+  @@map("users")
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users      User[]
+  reports    Report[]
+  workOrders WorkOrder[]
+
+  @@map("departments")
+}
+
+model District {
+  id         String   @id
+  name       String   @unique
+  arabicName String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users       User[]
+  reports     Report[]
+  suggestions Suggestion[]
+
+  @@map("districts")
+}
+
+model Report {
+  id                   String          @id @default(cuid())
+  authorId             String?
+  departmentId         String?
+  districtId           String
+  title                String
+  description          String
+  category             String
+  status               ReportStatus    @default(PENDING)
+  severity             ReportSeverity?
+  latitude             Float
+  longitude            Float
+  importedVoteBaseline Int             @default(0)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  author        User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  department    Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  district      District        @relation(fields: [districtId], references: [id], onDelete: Restrict)
+  attachments   Attachment[]
+  votes         Vote[]
+  workOrders    WorkOrder[]
+  statusHistory StatusHistory[]
+
+  @@index([authorId])
+  @@index([departmentId])
+  @@index([districtId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@map("reports")
+}
+
+model Attachment {
+  id                String         @id @default(cuid())
+  reportId          String
+  workOrderId       String?
+  workOrderReportId String?
+  uploadedById      String?
+  name              String
+  mimeType          String
+  url               String
+  kind              AttachmentKind
+  createdAt         DateTime       @default(now())
+
+  report     Report     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  workOrder  WorkOrder? @relation(fields: [workOrderId, workOrderReportId], references: [id, reportId], onDelete: SetNull)
+  uploadedBy User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([reportId])
+  @@index([workOrderId])
+  @@index([workOrderId, workOrderReportId])
+  @@index([uploadedById])
+  @@index([kind])
+  @@map("attachments")
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  reportId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, userId])
+  @@index([userId])
+  @@map("report_votes")
+}
+
+model Suggestion {
+  id                   String           @id @default(cuid())
+  authorId             String?
+  districtId           String
+  title                String
+  description          String
+  category             String
+  status               SuggestionStatus @default(UNDER_REVIEW)
+  latitude             Float
+  longitude            Float
+  importedVoteBaseline Int              @default(0)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  author   User?            @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  district District         @relation(fields: [districtId], references: [id], onDelete: Restrict)
+  votes    SuggestionVote[]
+
+  @@index([authorId])
+  @@index([districtId])
+  @@index([category])
+  @@index([status])
+  @@index([createdAt])
+  @@map("suggestions")
+}
+
+model SuggestionVote {
+  id           String   @id @default(cuid())
+  suggestionId String
+  userId       String
+  createdAt    DateTime @default(now())
+
+  suggestion Suggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([suggestionId, userId])
+  @@index([userId])
+  @@map("suggestion_votes")
+}
+
+model WorkOrder {
+  id           String            @id @default(cuid())
+  reportId     String
+  departmentId String?
+  createdById  String?
+  title        String
+  description  String
+  priority     WorkOrderPriority
+  status       WorkOrderStatus   @default(PENDING)
+  locationText String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  report          Report                   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  department      Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy       User?                    @relation("WorkOrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  crewAssignments CrewAssignment[]
+  attachments     Attachment[]
+  statusHistory   WorkOrderStatusHistory[]
+
+  @@unique([id, reportId])
+  @@index([reportId])
+  @@index([departmentId])
+  @@index([createdById])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+  @@map("work_orders")
+}
+
+model CrewAssignment {
+  id           String   @id @default(cuid())
+  workOrderId  String
+  crewUserId   String
+  assignedById String?
+  assignedAt   DateTime @default(now())
+
+  workOrder  WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  crewUser   User      @relation("CrewMemberAssignments", fields: [crewUserId], references: [id], onDelete: Restrict)
+  assignedBy User?     @relation("CrewAssignmentManager", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([workOrderId, crewUserId])
+  @@index([crewUserId, assignedAt])
+  @@index([assignedById])
+  @@map("crew_assignments")
+}
+
+model StatusHistory {
+  id         String        @id @default(cuid())
+  reportId   String
+  actorId    String?
+  fromStatus ReportStatus?
+  toStatus   ReportStatus
+  note       String?
+  createdAt  DateTime      @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  actor  User?  @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([reportId, createdAt])
+  @@index([actorId])
+  @@map("report_status_history")
+}
+
+model WorkOrderStatusHistory {
+  id          String           @id @default(cuid())
+  workOrderId String
+  actorId     String?
+  fromStatus  WorkOrderStatus?
+  toStatus    WorkOrderStatus
+  note        String?
+  createdAt   DateTime         @default(now())
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId, createdAt])
+  @@index([actorId])
+  @@map("work_order_status_history")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@map("audit_logs")
+}
