@@ -2,6 +2,11 @@
 
 import * as React from 'react'
 import * as RechartsPrimitive from 'recharts'
+import type { LegendPayload, TooltipContentProps } from 'recharts'
+import type {
+  NameType,
+  ValueType,
+} from 'recharts/types/component/DefaultTooltipContent'
 
 import { cn } from '@/lib/utils'
 
@@ -118,7 +123,7 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+}: Partial<TooltipContentProps<ValueType, NameType>> &
   React.ComponentProps<'div'> & {
     hideLabel?: boolean
     hideIndicator?: boolean
@@ -257,7 +262,9 @@ function ChartLegendContent({
   verticalAlign = 'bottom',
   nameKey,
 }: React.ComponentProps<'div'> &
-  Pick<RechartsPrimitive.LegendProps, 'payload' | 'verticalAlign'> & {
+  {
+    payload?: ReadonlyArray<LegendPayload>
+    verticalAlign?: 'top' | 'bottom' | 'middle'
     hideIcon?: boolean
     nameKey?: string
   }) {

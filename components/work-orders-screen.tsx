@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast"
 
 export default function WorkOrdersScreen() {
   const { toast } = useToast()
-  const [batches, setBatches] = useState([
+  const [batches] = useState([
     {
       id: "A",
       name: "Crew A - Northern Route",

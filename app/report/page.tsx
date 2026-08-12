@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { DuplicateDetectionModal } from "@/components/duplicate-detection-modal"
 import { X, MapPin, Trash2, Lightbulb, AlertCircle, Camera } from "lucide-react"
+import Image from "next/image"
 
 export default function ReportPage() {
   const { toast } = useToast()
@@ -153,9 +154,12 @@ export default function ReportPage() {
             <label htmlFor="image-upload" className="cursor-pointer">
               {uploadedImage ? (
                 <div className="relative">
-                  <img
+                  <Image
                     src={uploadedImage || "/placeholder.svg"}
                     alt="Preview"
+                    width={96}
+                    height={96}
+                    unoptimized
                     className="h-24 w-24 object-cover rounded-lg mx-auto mb-2"
                   />
                   <p className="text-xs text-muted-foreground">Click to change photo</p>
@@ -194,13 +198,16 @@ export default function ReportPage() {
       </div>
 
       <DuplicateDetectionModal
-        isOpen={showDuplicateModal}
+        open={showDuplicateModal}
+        photoUrl={uploadedImage}
+        description={description}
+        issueType={selectedType}
+        lat={21.5433}
+        lng={39.1728}
+        district="Jeddah"
         onClose={() => setShowDuplicateModal(false)}
-        onUpvote={handleUpvoteExisting}
+        onConfirmDuplicate={handleUpvoteExisting}
         onSubmitNew={handleSubmitAsNew}
-        userPhoto={uploadedImage}
-        userDescription={description}
-        issueType={selectedType || ""}
       />
     </div>
   )

@@ -9,13 +9,14 @@ import { useRouter } from "next/navigation"
 import { useData } from "@/context/data-context"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import dynamic from "next/dynamic"
+import { reportStatusStep } from "@/lib/report-utils"
 
 const MapComponent = dynamic(() => import("@/components/map-component"), {
   ssr: false,
   loading: () => <div className="h-full w-full bg-muted animate-pulse" />,
 })
 
-interface ReportStatus {
+interface ReportTrackingView {
   id: string
   type: string
   createdAt: string
@@ -31,7 +32,7 @@ export default function ReportTrackingPage() {
   const router = useRouter()
   const { reports } = useData()
   const reportId = params.id as string
-  const [report, setReport] = useState<ReportStatus | null>(null)
+  const [report, setReport] = useState<ReportTrackingView | null>(null)
   const [loading, setLoading] = useState(true)
   const [isMapOpen, setIsMapOpen] = useState(false)
 
@@ -41,17 +42,17 @@ export default function ReportTrackingPage() {
         const actualReport = reports.find((r) => r.id === reportId)
 
         if (actualReport) {
-          const reportStatus: ReportStatus = {
+          const reportStatus: ReportTrackingView = {
             id: actualReport.id,
-            type: actualReport.type || actualReport.title || "Unknown",
-            createdAt: actualReport.createdAt || new Date().toISOString(),
-            district: actualReport.district || "Unknown District",
-            severity: "Medium",
-            location: { lat: actualReport.lat, lng: actualReport.lng },
-            currentStatus: 0,
+            type: actualReport.title,
+            createdAt: actualReport.createdAt,
+            district: actualReport.district,
+            severity: actualReport.severity ? `${actualReport.severity.charAt(0).toUpperCase()}${actualReport.severity.slice(1)}` : "Medium",
+            location: actualReport.location,
+            currentStatus: reportStatusStep(actualReport.status),
             timeline: [
               {
-                time: new Date(actualReport.createdAt || Date.now()).toLocaleTimeString([], {
+                time: new Date(actualReport.createdAt).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
                 }),
@@ -61,47 +62,10 @@ export default function ReportTrackingPage() {
           }
           setReport(reportStatus)
         } else {
-          const myReports = localStorage.getItem("myReports")
-          if (myReports) {
-            const myReportsArray = JSON.parse(myReports)
-            const localReport = myReportsArray.find((r: any) => r.id === reportId)
-
-            if (localReport) {
-              const reportStatus: ReportStatus = {
-                id: localReport.id,
-                type: localReport.issueType || localReport.title || "Unknown",
-                createdAt: localReport.createdAt || new Date().toISOString(),
-                district: localReport.district || "Unknown District",
-                severity: "Medium",
-                location: {
-                  lat: localReport.lat || localReport.latitude,
-                  lng: localReport.lng || localReport.longitude,
-                },
-                currentStatus: 0,
-                timeline: [
-                  {
-                    time: new Date(localReport.createdAt || Date.now()).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }),
-                    text: "Report submitted",
-                  },
-                ],
-              }
-              setReport(reportStatus)
-            } else {
-              const response = await fetch(`/api/report-status/${reportId}`)
-              if (response.ok) {
-                const data = await response.json()
-                setReport(data)
-              }
-            }
-          } else {
-            const response = await fetch(`/api/report-status/${reportId}`)
-            if (response.ok) {
-              const data = await response.json()
-              setReport(data)
-            }
+          const response = await fetch(`/api/report-status/${reportId}`)
+          if (response.ok) {
+            const data = (await response.json()) as ReportTrackingView
+            setReport(data)
           }
         }
       } catch (error) {
@@ -323,11 +287,11 @@ export default function ReportTrackingPage() {
                 reports={[
                   {
                     id: report.id,
-                    lat: report.location.lat,
-                    lng: report.location.lng,
+                    location: report.location,
                     title: report.type,
                     description: report.district,
                     votes: 0,
+                    attachments: [],
                   },
                 ]}
               />

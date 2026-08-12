@@ -10,6 +10,8 @@ import MapSelectorModal from "./map-selector-modal"
 import { DuplicateDetectionModal } from "./duplicate-detection-modal"
 import { useToast } from "@/hooks/use-toast"
 import { useData } from "@/context/data-context"
+import type { Report } from "@/types/domain"
+import Image from "next/image"
 
 const issueTypes = [
   { id: "trash", label: "Trash", icon: Trash2 },
@@ -22,7 +24,7 @@ const issueTypes = [
 
 interface ReportFormModalProps {
   onClose: () => void
-  onReportSubmitted: (report: any) => void
+  onReportSubmitted: (report: Report) => void
 }
 
 interface FormErrors {
@@ -85,34 +87,32 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1500))
 
-    const newReport = {
+    const newReport: Report = {
       id: `report-${Date.now()}`,
       title:
         selectedIssueType === "other"
           ? otherDescription
           : issueTypes.find((t) => t.id === selectedIssueType)?.label || "New Report",
       category: selectedIssueType,
-      issueType: selectedIssueType,
-      otherDescription: selectedIssueType === "other" ? otherDescription : undefined,
       description,
-      lat: selectedLat,
-      lng: selectedLng,
-      latitude: selectedLat,
-      longitude: selectedLng,
-      district: selectedDistrictName ?? "Unknown District",
-      photoUrl: uploadedPhoto,
-      image: uploadedPhoto,
-      status: "Pending",
-      type: "Pending",
+      location: { lat: selectedLat!, lng: selectedLng! },
+      district: selectedDistrictName || "Unknown District",
+      status: "pending",
       createdAt: new Date().toISOString(),
       votes: 0,
-      authorId: user.name,
+      authorId: user.id,
+      attachments: uploadedPhoto
+        ? [
+            {
+              id: `attachment-${Date.now()}`,
+              name: "Report photo",
+              mimeType: "image/*",
+              url: uploadedPhoto,
+              kind: "report-photo",
+            },
+          ]
+        : [],
     }
-
-    const existingReports = localStorage.getItem("myReports")
-    const reportsArray = existingReports ? JSON.parse(existingReports) : []
-    reportsArray.push(newReport)
-    localStorage.setItem("myReports", JSON.stringify(reportsArray))
 
     onReportSubmitted(newReport)
     setLoading(false)
@@ -148,6 +148,7 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
 
       {showDuplicateModal && (
         <DuplicateDetectionModal
+          open={showDuplicateModal}
           photoUrl={uploadedPhoto}
           description={description}
           issueType={selectedIssueType}
@@ -198,7 +199,7 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
 
             {/* ISSUE TYPES */}
             <div className={formErrors.issueType ? "shake" : ""}>
-              <label className="text-sm font-semibold text-[#1B4D3E] mb-3 block">What's the issue?</label>
+              <label className="text-sm font-semibold text-[#1B4D3E] mb-3 block">What&apos;s the issue?</label>
               <div
                 className={`grid grid-cols-2 gap-3 p-3 rounded-xl ${formErrors.issueType ? "border-2 border-red-500" : ""}`}
               >
@@ -252,9 +253,12 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
                 >
                   {uploadedPhoto ? (
                     <>
-                      <img
+                      <Image
                         src={uploadedPhoto || "/placeholder.svg"}
                         alt="Uploaded preview"
+                        width={800}
+                        height={360}
+                        unoptimized
                         className="w-full h-full object-cover"
                       />
                     </>

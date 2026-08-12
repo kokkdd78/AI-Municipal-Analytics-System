@@ -1,33 +1,27 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Home, MapIcon, Lightbulb, User, Layers } from "lucide-react"
 import Link from "next/link"
+import { useData } from "@/context/data-context"
+import { getReportPhotoUrl } from "@/lib/report-utils"
+import type { Report } from "@/types/domain"
+import Image from "next/image"
+import { handleStandaloneMapPinAction } from "@/lib/map-actions"
 
 const MapComponent = dynamic(() => import("../../components/map-component"), {
   ssr: false,
 })
 
 export default function MapPage() {
+  const { reports, suggestions, votedReports, votedSuggestions, upvoteSuggestion } = useData()
   const [activeTab, setActiveTab] = useState("map")
-  const [reports, setReports] = useState<any[]>([])
-  const [selectedReport, setSelectedReport] = useState<any | null>(null)
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null)
   const [suggestionsVisible, setSuggestionsVisible] = useState(true)
 
-  // Load reports whenever the storage updates
-  useEffect(() => {
-    const loadReports = () => {
-      const saved = JSON.parse(localStorage.getItem("reports") || "[]")
-      setReports(saved)
-    }
-
-    loadReports()
-
-    window.addEventListener("storage", loadReports)
-    return () => window.removeEventListener("storage", loadReports)
-  }, [])
+  const selectedPhoto = selectedReport ? getReportPhotoUrl(selectedReport) : null
 
   return (
     <div className="h-screen bg-background flex flex-col relative">
@@ -40,21 +34,18 @@ export default function MapPage() {
       <div className="flex-1 relative">
         <MapComponent
           center={[21.5433, 39.1728]}
-          maintenancePins={reports.map((r) => ({
-            id: r.id,
-            title: r.issueType,
-            lat: r.lat,
-            lng: r.lng,
-            votes: 0,
-            image: r.photo,
-            description: r.description,
-            district: r.district,
-          }))}
-          suggestionPins={[]}
+          reports={reports}
+          suggestions={suggestions}
           suggestionsVisible={suggestionsVisible}
-          onPinClick={(id: string) => {
-            const found = reports.find((r) => r.id === id)
-            setSelectedReport(found || null)
+          votedReports={votedReports}
+          votedSuggestions={votedSuggestions}
+          onPinClick={(id, type) => {
+            handleStandaloneMapPinAction(id, type, {
+              selectReport: (reportId) => {
+                setSelectedReport(reports.find((report) => report.id === reportId) ?? null)
+              },
+              upvoteSuggestion,
+            })
           }}
         />
 
@@ -75,15 +66,18 @@ export default function MapPage() {
               <div className="w-10 h-1 bg-muted rounded-full"></div>
             </div>
 
-            {selectedReport.photo && (
-              <img
-                src={selectedReport.photo || "/placeholder.svg"}
+            {selectedPhoto && (
+              <Image
+                src={selectedPhoto}
                 alt="Issue Photo"
+                width={800}
+                height={320}
+                unoptimized
                 className="w-full h-40 object-cover rounded-lg mb-4"
               />
             )}
 
-            <h2 className="text-xl font-bold text-foreground mb-2">{selectedReport.issueType}</h2>
+            <h2 className="text-xl font-bold text-foreground mb-2">{selectedReport.title}</h2>
 
             <p className="text-sm text-muted-foreground mb-1">{selectedReport.description}</p>
 

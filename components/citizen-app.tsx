@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 
 import HomeScreen from "./home-screen"
 import MapScreen from "./map-screen"
@@ -12,20 +11,8 @@ import { Home, Map, Lightbulb, User } from "lucide-react"
 import { LocationProvider } from "@/context/location-context"
 import DistrictSelectorModal from "@/components/district-selector-modal"
 import { useAuth } from "@/context/auth-context"
-import { DataProvider, useData } from "@/context/data-context"
-
-export interface Report {
-  id: string
-  title: string
-  lat: number
-  lng: number
-  votes: number
-  description?: string
-  type?: string
-  photo?: string | null
-  district?: string
-  createdAt?: string
-}
+import { useData } from "@/context/data-context"
+import { isReportOwnedByUser } from "@/lib/report-utils"
 
 import OnboardingWalkthrough from "./onboarding-walkthrough"
 
@@ -46,16 +33,16 @@ export default function CitizenApp() {
 }
 
 function CitizenAppContent() {
-  const router = useRouter()
   const [activeTab, setActiveTab] = useState("home")
   const { reports, addReport } = useData()
 
-  const totalReportsCount = reports.length
+  const { user } = useData()
+  const myReportsCount = reports.filter((report) => isReportOwnedByUser(report, user)).length
 
   const renderScreen = () => {
     switch (activeTab) {
       case "home":
-        return <HomeScreen addReport={addReport} reportsCount={totalReportsCount} />
+        return <HomeScreen addReport={addReport} reportsCount={myReportsCount} />
       case "map":
         return <MapScreen onNavigate={setActiveTab} />
       case "suggestions":
@@ -63,7 +50,7 @@ function CitizenAppContent() {
       case "profile":
         return <ProfileScreen onNavigate={setActiveTab} />
       default:
-        return <HomeScreen addReport={addReport} reportsCount={totalReportsCount} />
+        return <HomeScreen addReport={addReport} reportsCount={myReportsCount} />
     }
   }
 

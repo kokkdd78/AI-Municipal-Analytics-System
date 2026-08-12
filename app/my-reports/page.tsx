@@ -1,41 +1,27 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, MapPin, Calendar, FileText } from "lucide-react"
-import type { Report } from "@/components/citizen-app"
 import StaticMap from "@/components/static-map"
-
-interface ReportWithMapUrl extends Report {
-  mapUrl?: string | null
-}
+import { useData } from "@/context/data-context"
+import { formatReportStatus, isReportOwnedByUser } from "@/lib/report-utils"
+import type { ReportStatus } from "@/types/domain"
 
 export default function MyReportsPage() {
   const router = useRouter()
-  const [reports, setReports] = useState<Report[]>([])
-  const [loading, setLoading] = useState(true)
+  const { reports: allReports, user } = useData()
+  const reports = allReports
+    .filter((report) => isReportOwnedByUser(report, user))
+    .toSorted((first, second) => second.createdAt.localeCompare(first.createdAt))
 
-  useEffect(() => {
-    const loadReports = () => {
-      const storedReports = localStorage.getItem("myReports")
-      if (storedReports) {
-        const parsedReports: Report[] = JSON.parse(storedReports)
-        setReports(parsedReports.reverse())
-      }
-      setLoading(false)
-    }
-
-    loadReports()
-  }, [])
-
-  const getStatusBadgeVariant = (status?: string) => {
-    switch (status?.toLowerCase()) {
+  const getStatusBadgeVariant = (status: ReportStatus) => {
+    switch (status) {
       case "resolved":
         return "default"
-      case "in progress":
+      case "in-progress":
         return "secondary"
       case "pending":
         return "outline"
@@ -44,31 +30,9 @@ export default function MyReportsPage() {
     }
   }
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return "No date"
+  const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-  }
-
-  const getStatusColor = (status?: string) => {
-    switch (status?.toLowerCase()) {
-      case "resolved":
-        return "text-green-600"
-      case "in progress":
-        return "text-blue-600"
-      case "pending":
-        return "text-yellow-600"
-      default:
-        return "text-muted-foreground"
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading reports...</p>
-      </div>
-    )
   }
 
   return (
@@ -106,9 +70,7 @@ export default function MyReportsPage() {
           // Reports grid
           <div className="space-y-4">
             {reports.map((report) => {
-              const lat = report.lat ?? report.latitude
-              const lng = report.lng ?? report.longitude
-              const hasLocation = lat && lng
+              const { lat, lng } = report.location
 
               return (
                 <Card
@@ -118,25 +80,19 @@ export default function MyReportsPage() {
                 >
                   <div className="flex gap-4">
                     <div className="flex-shrink-0 w-20 h-20 bg-muted rounded-lg overflow-hidden">
-                      {hasLocation ? (
-                        <div className="w-full h-full">
-                          <StaticMap lat={lat} lng={lng} />
-                        </div>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <p className="text-gray-400 text-xs text-center px-1">No location</p>
-                        </div>
-                      )}
+                      <div className="w-full h-full">
+                        <StaticMap lat={lat} lng={lng} />
+                      </div>
                     </div>
 
                     {/* Report Details */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <h3 className="font-semibold text-foreground truncate">
-                          {report.title || report.issueType || report.type}
+                          {report.title}
                         </h3>
-                        <Badge variant={getStatusBadgeVariant(report.status || report.type)} className="flex-shrink-0">
-                          {report.status || report.type || "Pending"}
+                        <Badge variant={getStatusBadgeVariant(report.status)} className="flex-shrink-0">
+                          {formatReportStatus(report.status)}
                         </Badge>
                       </div>
 
@@ -145,18 +101,14 @@ export default function MyReportsPage() {
                       )}
 
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        {report.district && (
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            <span className="truncate max-w-[100px]">{report.district}</span>
-                          </div>
-                        )}
-                        {report.createdAt && (
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>{formatDate(report.createdAt)}</span>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          <span className="truncate max-w-[100px]">{report.district}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          <span>{formatDate(report.createdAt)}</span>
+                        </div>
                       </div>
                     </div>
                   </div>

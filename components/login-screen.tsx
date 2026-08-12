@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/context/auth-context"
-import { Building2, Briefcase } from "lucide-react"
+import { Briefcase } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import SignUpScreen from "./sign-up-screen"
@@ -12,20 +12,22 @@ import EmployeeLoginScreen from "./employee-login-screen"
 
 import { OnboardingCarousel } from "./onboarding-carousel"
 
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 
-export default function LoginScreen() {
+interface LoginScreenProps {
+  initialMode?: string
+}
+
+export default function LoginScreen({ initialMode }: LoginScreenProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const mode = searchParams.get("mode")
 
-  const { setUserRole, setUserData } = useAuth()
+  const { setUserRole } = useAuth()
   const [phone, setPhone] = useState("+966")
   const [password, setPassword] = useState("")
   const [showOtpModal, setShowOtpModal] = useState(false)
   const [otp, setOtp] = useState("")
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false)
-  const [showSignUp, setShowSignUp] = useState<boolean>(mode === "signup" || true) // Default to Sign Up or query param
+  const [showSignUp, setShowSignUp] = useState<boolean>(initialMode === "signup")
 
   const handleCitizenLogin = () => {
     if (phone && password) {
@@ -97,7 +99,7 @@ export default function LoginScreen() {
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
               <button onClick={() => setShowSignUp(true)} className="text-[#1B4D3E] font-medium hover:underline">
                 Sign up
               </button>
@@ -152,7 +154,7 @@ export default function LoginScreen() {
               Verify & Sign In
             </Button>
             <p className="text-xs text-center text-muted-foreground">
-              Didn't receive the code? <button className="text-[#1B4D3E] font-medium hover:underline">Resend</button>
+              Didn&apos;t receive the code? <button className="text-[#1B4D3E] font-medium hover:underline">Resend</button>
             </p>
           </div>
         </DialogContent>

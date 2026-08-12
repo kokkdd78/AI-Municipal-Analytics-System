@@ -4,13 +4,12 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Camera, Sparkles } from "lucide-react"
-import { useAuth } from "@/context/auth-context"
 import { useData } from "@/context/data-context"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import ReportFormModal from "./report-form-modal"
 import AiReportModal from "./ai-report-modal"
-import type { Report } from "./citizen-app"
+import type { Report } from "@/types/domain"
 
 interface HomeScreenProps {
   addReport?: (report: Report) => void
@@ -18,38 +17,10 @@ interface HomeScreenProps {
 }
 
 export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps) {
-  const { setUserRole } = useAuth()
   const { user } = useData()
   const router = useRouter()
   const [showReportModal, setShowReportModal] = useState(false)
   const [showAiReportModal, setShowAiReportModal] = useState(false)
-  const [localReportsCount, setLocalReportsCount] = useState(0)
-
-  useEffect(() => {
-    const loadReportsCount = () => {
-      const existingReports = localStorage.getItem("myReports")
-      if (existingReports) {
-        const reportsArray = JSON.parse(existingReports)
-        setLocalReportsCount(reportsArray.length)
-      } else {
-        setLocalReportsCount(0)
-      }
-    }
-
-    loadReportsCount()
-
-    const handleStorageChange = () => {
-      loadReportsCount()
-    }
-
-    window.addEventListener("storage", handleStorageChange)
-    window.addEventListener("focus", loadReportsCount)
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange)
-      window.removeEventListener("focus", loadReportsCount)
-    }
-  }, [])
 
   const firstName = user.name.split(" ")[0] || "User"
   const initials =
@@ -63,7 +34,6 @@ export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps)
     if (addReport) {
       addReport(report)
     }
-    setLocalReportsCount((prev) => prev + 1)
   }
 
   return (
@@ -72,7 +42,7 @@ export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps)
       <div className="px-6 pt-6 pb-4 border-b border-border flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Good morning, {firstName}</h1>
-          <p className="text-muted-foreground text-sm">Let's make our city better today</p>
+          <p className="text-muted-foreground text-sm">Let&apos;s make our city better today</p>
         </div>
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10">
@@ -91,7 +61,7 @@ export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps)
             onClick={() => router.push("/my-reports")}
           >
             <div className="flex flex-col items-center text-center">
-              <p className="text-3xl font-bold text-primary mb-1">{localReportsCount}</p>
+              <p className="text-3xl font-bold text-primary mb-1">{reportsCount}</p>
               <p className="text-xs text-muted-foreground font-medium">Reports Submitted</p>
             </div>
           </Card>

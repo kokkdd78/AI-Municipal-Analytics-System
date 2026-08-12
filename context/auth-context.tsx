@@ -1,48 +1,43 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-
-type UserRole = "Citizen" | "Manager" | "Crew" | null
-
-interface UserData {
-  fullName: string
-  phone: string
-  district?: string
-}
+import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react"
+import {
+  clearAppSession,
+  getAppStorageSnapshot,
+  parseAppStorage,
+  subscribeAppStorage,
+  updateAppStorage,
+} from "@/lib/client-storage"
+import type { UserRole } from "@/types/domain"
 
 interface AuthContextType {
-  userRole: UserRole
-  setUserRole: (role: UserRole) => void
-  userData: UserData | null
-  setUserData: (data: UserData | null) => void
+  userRole: UserRole | null
+  setUserRole: (role: UserRole | null) => void
   isLoading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [userRole, setUserRole] = useState<UserRole>(null)
-  const [userData, setUserData] = useState<UserData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    const storedRole = localStorage.getItem("userRole")
-    if (storedRole) {
-      setUserRole(storedRole as UserRole)
+  const rawStorage = useSyncExternalStore(subscribeAppStorage, getAppStorageSnapshot, () => null)
+  const storedState = useMemo(() => parseAppStorage(rawStorage), [rawStorage])
+  const isHydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  )
+  const setUserRole = useCallback((role: UserRole | null) => {
+    if (role === null) {
+      clearAppSession()
+    } else {
+      updateAppStorage({ role })
     }
-    setIsLoading(false)
   }, [])
 
-  useEffect(() => {
-    if (userRole) {
-      localStorage.setItem("userRole", userRole)
-    } else {
-      localStorage.removeItem("userRole")
-    }
-  }, [userRole])
-
   return (
-    <AuthContext.Provider value={{ userRole, setUserRole, userData, setUserData, isLoading }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ userRole: storedState.role, setUserRole, isLoading: !isHydrated }}>
+      {children}
+    </AuthContext.Provider>
   )
 }
 

@@ -1,8 +1,6 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useEffect, useState } from "react"
-import { getStaticMapUrl } from "@/app/actions/static-map"
 
 const MapComponent = dynamic(() => import("./map-component"), {
   ssr: false,
@@ -27,16 +25,15 @@ export default function StaticMap({ lat, lng, label }: StaticMapProps) {
         reports={[
           {
             id: "location",
-            lat,
-            lng,
-            status: "pending",
+            location: { lat, lng },
             title: label || "Location",
-            votes: 0, // Added required votes property
+            votes: 0,
+            attachments: [],
           },
         ]}
         suggestions={[]}
         suggestionsVisible={false}
-        onPinClick={() => { }}
+        onPinClick={() => {}}
         zoom={15}
       />
     </div>

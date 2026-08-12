@@ -1,9 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from "@/components/ui/carousel"
 import { ChevronRight, Camera, MapPin, ThumbsUp } from "lucide-react"
 import Image from "next/image"
@@ -20,21 +19,21 @@ export default function OnboardingWalkthrough({ onGetStarted }: OnboardingWalkth
     const slides = [
         {
             id: 1,
-            image: "/C:/Users/aymnk/.gemini/antigravity/brain/a2bd108b-cf14-403a-a54a-3b44a93c9f5d/onboarding_camera_ui_1764441693190.png",
+            image: "/placeholder.jpg",
             title: "Snap & Fix.",
             description: "See a problem? Just open the camera and tap.",
             icon: Camera,
         },
         {
             id: 2,
-            image: "/C:/Users/aymnk/.gemini/antigravity/brain/a2bd108b-cf14-403a-a54a-3b44a93c9f5d/onboarding_map_truck_ui_1764441707343.png",
+            image: "/placeholder.jpg",
             title: "Track Your Request.",
             description: "Watch the crew come to you in real-time.",
             icon: MapPin,
         },
         {
             id: 3,
-            image: "https://images.unsplash.com/photo-1570126618953-d437136e8c03?q=80&w=2670&auto=format&fit=crop", // Placeholder for voting UI
+            image: "/placeholder.jpg",
             title: "Vote for Al-Naeem.",
             description: "Support the best ideas for your neighborhood.",
             icon: ThumbsUp,
@@ -55,12 +54,18 @@ export default function OnboardingWalkthrough({ onGetStarted }: OnboardingWalkth
         }
     }
 
-    // Update current slide index
-    if (api) {
-        api.on("select", () => {
-            setCurrent(api.selectedScrollSnap())
-        })
-    }
+    useEffect(() => {
+        if (!api) return
+
+        const updateCurrent = () => setCurrent(api.selectedScrollSnap())
+        const initialSelectionFrame = window.requestAnimationFrame(updateCurrent)
+        api.on("select", updateCurrent)
+
+        return () => {
+            window.cancelAnimationFrame(initialSelectionFrame)
+            api.off("select", updateCurrent)
+        }
+    }, [api])
 
     return (
         <div className="min-h-screen bg-[#F5F7F5] flex items-center justify-center p-4">

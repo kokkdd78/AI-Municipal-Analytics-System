@@ -24,7 +24,7 @@ export default function EmployeeLoginScreen({ onBack }: EmployeeLoginScreenProps
         <div className="min-h-screen flex bg-[#F5F7F5]">
             {/* Left Side - Brand */}
             <div className="hidden md:flex md:w-1/2 bg-[#1B4D3E] flex-col items-center justify-center text-white p-12 relative overflow-hidden">
-                <div className="absolute inset-0 opacity-10 bg-[url('/images/attachments-gen-images-public-sidewalk.jpg')] bg-cover bg-center mix-blend-overlay"></div>
+                <div className="absolute inset-0 opacity-10 bg-[url('/placeholder.jpg')] bg-cover bg-center mix-blend-overlay"></div>
                 <div className="relative z-10 flex flex-col items-center">
                     <div className="h-24 w-24 bg-white/10 rounded-full flex items-center justify-center mb-8 backdrop-blur-sm border border-white/20">
                         <Briefcase className="h-12 w-12 text-white" />

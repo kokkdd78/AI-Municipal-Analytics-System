@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { AlertCircle, MapPin, Navigation } from 'lucide-react'
+import Image from 'next/image'
 
 interface TaskExecutionScreenProps {
   onComplete: () => void
@@ -57,9 +58,12 @@ export default function TaskExecutionScreen({ onComplete, onBack }: TaskExecutio
             Large pothole reported near the school entrance. Immediate attention required for safety.
           </p>
           <div className="w-full h-40 bg-slate-700 rounded-md flex items-center justify-center">
-            <img
-              src="/pothole.png"
+            <Image
+              src="/placeholder.jpg"
               alt="Issue photo"
+              width={800}
+              height={320}
+              unoptimized
               className="w-full h-full object-cover rounded-md"
             />
           </div>

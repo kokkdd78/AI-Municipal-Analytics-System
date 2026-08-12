@@ -29,7 +29,7 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
       addr.suburb || addr.neighbourhood || addr.city_district || addr.town || addr.city || "Unknown Location"
 
     return districtName
-  } catch (e) {
+  } catch {
     return "Unknown Location"
   }
 }
@@ -49,8 +49,8 @@ export default function MapSelectorModal({ onClose, onSelect }: MapSelectorModal
         <div className="relative flex-1">
           <MapComponent
             center={mapCenter}
-            maintenancePins={[]}
-            suggestionPins={[]}
+            reports={[]}
+            suggestions={[]}
             suggestionsVisible={false}
             onPinClick={() => {}}
             onCenterChange={(lat: number, lng: number) => setMapCenter([lat, lng])}

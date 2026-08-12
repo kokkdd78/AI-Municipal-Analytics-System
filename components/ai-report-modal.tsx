@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { Camera, X, MapPin } from "lucide-react"
-import type { Report } from "./citizen-app"
+import type { Report } from "@/types/domain"
 import { useUserLocation } from "@/context/location-context"
 import { useData } from "@/context/data-context"
+import NextImage from "next/image"
 
 interface AiReportModalProps {
   onClose: () => void
@@ -22,6 +23,7 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
   const { location, district } = useUserLocation()
   const { user } = useData()
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; mimeType: string } | null>(null)
   const [category, setCategory] = useState("Infrastructure Issue")
   const [description, setDescription] = useState("")
 
@@ -68,6 +70,7 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
       try {
         const compressedBase64 = await compressImage(file)
         setUploadedPhoto(compressedBase64)
+        setUploadedFile({ name: file.name, mimeType: file.type })
       } catch (error) {
         console.error("Upload error:", error)
         toast({
@@ -102,26 +105,30 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
       const reportForApp: Report = {
         id: reportId,
         title: category,
-        issueType: category,
-        lat: reportLat + randomOffset,
-        lng: reportLng + randomOffset,
-        latitude: reportLat + randomOffset,
-        longitude: reportLng + randomOffset,
+        category,
+        location: {
+          lat: reportLat + randomOffset,
+          lng: reportLng + randomOffset,
+        },
         votes: 0,
-        description: description,
-        status: "Pending",
-        type: "Pending",
-        photo: uploadedPhoto,
-        image: uploadedPhoto,
+        description,
+        status: "pending",
         district: reportDistrict,
         createdAt: new Date().toISOString(),
-        authorId: user.name,
+        authorId: user.id,
+        attachments:
+          uploadedPhoto && uploadedFile
+            ? [
+                {
+                  id: `attachment-${Date.now()}`,
+                  name: uploadedFile.name,
+                  mimeType: uploadedFile.mimeType,
+                  url: uploadedPhoto,
+                  kind: "report-photo",
+                },
+              ]
+            : [],
       }
-
-      const existingReports = localStorage.getItem("myReports")
-      const reportsArray = existingReports ? JSON.parse(existingReports) : []
-      reportsArray.push(reportForApp)
-      localStorage.setItem("myReports", JSON.stringify(reportsArray))
 
       onReportSubmitted(reportForApp)
 
@@ -163,10 +170,18 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
             <div className="space-y-4">
               {/* Uploaded Photo */}
               <div className="relative rounded-lg overflow-hidden">
-                <img src={uploadedPhoto || "/placeholder.svg"} alt="uploaded" className="w-full h-64 object-cover" />
+                <NextImage
+                  src={uploadedPhoto || "/placeholder.svg"}
+                  alt="Uploaded report"
+                  width={800}
+                  height={512}
+                  unoptimized
+                  className="w-full h-64 object-cover"
+                />
                 <button
                   onClick={() => {
                     setUploadedPhoto(null)
+                    setUploadedFile(null)
                     setDescription("")
                   }}
                   className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"

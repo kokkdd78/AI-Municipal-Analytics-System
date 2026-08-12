@@ -5,6 +5,11 @@ export const metadata = {
   description: "Your report has been submitted successfully",
 }
 
-export default function ReportSuccessPage() {
-  return <ReportSuccess />
+export default async function ReportSuccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reportId?: string }>
+}) {
+  const { reportId } = await searchParams
+  return <ReportSuccess reportId={reportId} />
 }

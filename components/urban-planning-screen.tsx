@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { MapPin, TrendingUp } from 'lucide-react'
 import {
   Select,
@@ -12,8 +11,19 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+type ProposalStatus = 'Under Review' | 'Approved' | 'Rejected'
+
+interface Proposal {
+  id: number
+  title: string
+  district: string
+  votes: number
+  cost: string
+  status: ProposalStatus
+}
+
 export default function UrbanPlanningScreen() {
-  const [proposals, setProposals] = useState([
+  const [proposals, setProposals] = useState<Proposal[]>([
     {
       id: 1,
       title: 'Community Garden Initiative',
@@ -48,13 +58,13 @@ export default function UrbanPlanningScreen() {
     },
   ])
 
-  const [selectedProposal, setSelectedProposal] = useState(null)
+  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null)
 
-  const updateStatus = (id, newStatus) => {
+  const updateStatus = (id: number, newStatus: ProposalStatus) => {
     setProposals(proposals.map(p => p.id === id ? { ...p, status: newStatus } : p))
   }
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: ProposalStatus) => {
     switch (status) {
       case 'Approved':
         return 'bg-green-100 text-green-700'
@@ -138,7 +148,10 @@ export default function UrbanPlanningScreen() {
                     </td>
                     <td className="px-6 py-4 text-slate-600">{proposal.cost}</td>
                     <td className="px-6 py-4">
-                      <Select value={proposal.status} onValueChange={(value) => updateStatus(proposal.id, value)}>
+                      <Select
+                        value={proposal.status}
+                        onValueChange={(value: ProposalStatus) => updateStatus(proposal.id, value)}
+                      >
                         <SelectTrigger className={`w-32 text-xs font-semibold border-0 ${getStatusColor(proposal.status)}`}>
                           <SelectValue />
                         </SelectTrigger>

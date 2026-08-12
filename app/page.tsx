@@ -1,7 +1,6 @@
 "use client"
 
 import { useAuth } from "@/context/auth-context"
-import LoginScreen from "@/components/login-screen"
 import CitizenApp from "@/components/citizen-app"
 import ManagerDashboard from "@/components/manager-dashboard"
 import CrewTaskList from "@/components/crew-task-list"

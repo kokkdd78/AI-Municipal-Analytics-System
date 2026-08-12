@@ -26,17 +26,17 @@ export function OnboardingCarousel() {
 
     const slides = [
         {
-            image: "/C:/Users/aymnk/.gemini/antigravity/brain/a2bd108b-cf14-403a-a54a-3b44a93c9f5d/onboarding_pothole_fix_1764441220242.png",
+            image: "/placeholder.jpg",
             title: "See It, Fix It",
             description: "Report issues like potholes instantly. Watch as your city transforms with every report.",
         },
         {
-            image: "/C:/Users/aymnk/.gemini/antigravity/brain/a2bd108b-cf14-403a-a54a-3b44a93c9f5d/onboarding_voting_ui_1764441247192.png",
+            image: "/placeholder.jpg",
             title: "Your Voice Matters",
             description: "Vote on local projects and decide where resources go. You have the power to shape your neighborhood.",
         },
         {
-            image: "/C:/Users/aymnk/.gemini/antigravity/brain/a2bd108b-cf14-403a-a54a-3b44a93c9f5d/onboarding_community_happy_1764441445294.png",
+            image: "/placeholder.jpg",
             title: "Stronger Together",
             description: "Join a community of active citizens. Build trust and pride in your city, one interaction at a time.",
         },

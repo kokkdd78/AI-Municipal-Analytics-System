@@ -3,13 +3,13 @@
 import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api"
 import { useMemo, useCallback, useState, useEffect } from "react"
 import { getGoogleMapsApiKey } from "@/app/actions/maps"
-import type * as google from "googlemaps" // Declare the google variable
+import type { MapReport, Suggestion } from "@/types/domain"
 
 interface GoogleMapComponentProps {
   center: { lat: number; lng: number }
   zoom?: number
-  reports?: any[]
-  suggestions?: any[]
+  reports?: MapReport[]
+  suggestions?: Suggestion[]
   suggestionsVisible?: boolean
   onPinClick?: (id: string, type: "report" | "suggestion") => void
   onMapClick?: (lat: number, lng: number) => void
@@ -55,7 +55,7 @@ export default function GoogleMapComponent({
     setMap(map)
   }, [])
 
-  const onUnmount = useCallback(function callback(map: google.maps.Map) {
+  const onUnmount = useCallback(function callback() {
     setMap(null)
   }, [])
 
@@ -104,7 +104,7 @@ export default function GoogleMapComponent({
       {reports.map((report) => (
         <Marker
           key={`report-${report.id}`}
-          position={{ lat: report.lat, lng: report.lng }}
+          position={report.location}
           onClick={() => onPinClick?.(report.id, "report")}
           icon={{
             url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
@@ -117,7 +117,7 @@ export default function GoogleMapComponent({
         suggestions.map((suggestion) => (
           <Marker
             key={`suggestion-${suggestion.id}`}
-            position={{ lat: suggestion.lat, lng: suggestion.lng }}
+            position={suggestion.location}
             onClick={() => onPinClick?.(suggestion.id, "suggestion")}
             icon={{
               url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2 } from "lucide-react"
 
@@ -11,8 +11,7 @@ interface ReportSuccessProps {
 
 export default function ReportSuccess({ reportId: propReportId }: ReportSuccessProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const reportId = propReportId || searchParams.get("reportId")
+  const reportId = propReportId
 
   useEffect(() => {
     if (!reportId) return

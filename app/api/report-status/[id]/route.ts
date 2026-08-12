@@ -15,42 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { id } = await params
 
-    const reportsData = typeof window !== "undefined" ? localStorage.getItem("reports") : null
-    let actualReport = null
-
-    if (reportsData) {
-      try {
-        const reports = JSON.parse(reportsData)
-        actualReport = reports.find((r: any) => r.id === id)
-      } catch (e) {
-        console.error("Error parsing reports from localStorage:", e)
-      }
-    }
-
-    // If actual report found, use its data
-    if (actualReport) {
-      const report: ReportStatus = {
-        id: actualReport.id,
-        type: actualReport.title || "Unknown Issue",
-        createdAt: actualReport.createdAt || new Date().toISOString(),
-        district: actualReport.district || "Unknown District",
-        severity: actualReport.severity || "Medium",
-        location: { lat: actualReport.lat || 21.5433, lng: actualReport.lng || 39.1728 },
-        currentStatus: 0,
-        timeline: [
-          {
-            time: new Date(actualReport.createdAt || Date.now()).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            text: "Report received by the system",
-          },
-        ],
-      }
-      return NextResponse.json(report, { status: 200 })
-    }
-
-    // Generate mock report based on ID (fallback)
+    // Phase 1 keeps this deterministic demo fallback until database persistence is introduced.
     const hash = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)
     const statusOptions = [0, 1, 2, 3]
     const severityOptions = ["Low", "Medium", "High"]
@@ -65,12 +30,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const report: ReportStatus = {
       id,
       type,
-      createdAt: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+      createdAt: new Date(Date.UTC(2026, 7, 1 + (hash % 7), 9, 0, 0)).toISOString(),
       district,
       severity,
       location: {
-        lat: 21.5 + Math.random() * 0.2,
-        lng: 39.1 + Math.random() * 0.2,
+        lat: 21.5 + (hash % 20) / 100,
+        lng: 39.1 + (hash % 20) / 100,
       },
       currentStatus,
       timeline: [

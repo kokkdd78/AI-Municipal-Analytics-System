@@ -13,6 +13,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { JEDDAH_DISTRICTS, type District, findDistrictByName } from "@/constants/districts"
 import dynamic from "next/dynamic"
+import type { Suggestion } from "@/types/domain"
 
 const MapComponent = dynamic(() => import("./map-component"), {
   ssr: false,
@@ -23,7 +24,7 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
   const { district } = useUserLocation()
   const { suggestions, upvoteSuggestion, votedSuggestions } = useData()
   const [isNewProposalOpen, setIsNewProposalOpen] = useState(false)
-  const [selectedSuggestion, setSelectedSuggestion] = useState<any>(null)
+  const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null)
   const [selectedDistrict, setSelectedDistrict] = useState<District>(
     findDistrictByName(district || "") || JEDDAH_DISTRICTS[0],
   )
@@ -120,6 +121,7 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
       </div>
 
       <NewSuggestionProposal
+        key={selectedDistrict.id}
         open={isNewProposalOpen}
         onOpenChange={setIsNewProposalOpen}
         district={selectedDistrict.name}
@@ -132,7 +134,7 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
             <>
               <div className="relative h-1/2">
                 <MapComponent
-                  center={{ lat: selectedSuggestion.lat, lng: selectedSuggestion.lng }}
+                  center={selectedSuggestion.location}
                   zoom={15}
                   suggestions={[selectedSuggestion]}
                   suggestionsVisible={true}

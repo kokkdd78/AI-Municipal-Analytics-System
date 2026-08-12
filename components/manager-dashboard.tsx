@@ -7,18 +7,24 @@ import { useAuth } from "@/context/auth-context"
 import { LogOut, Map, FileText, PenTool, AlertCircle, MapPin, Truck, ChevronDown } from "lucide-react"
 import WorkOrdersScreen from "./work-orders-screen"
 import UrbanPlanningScreen from "./urban-planning-screen"
-import { useToast } from "@/hooks/use-toast"
+
+interface IssuePin {
+  id: number
+  lat: number
+  lng: number
+  title: string
+  status: "Critical" | "Warning"
+}
 
 export default function ManagerDashboard() {
   const { setUserRole } = useAuth()
-  const { toast } = useToast()
   const [activeMenu, setActiveMenu] = useState("Operations")
   const [showAlerts, setShowAlerts] = useState(true)
   const [mapLayer, setMapLayer] = useState("Show All")
-  const [selectedPin, setSelectedPin] = useState(null)
+  const [selectedPin, setSelectedPin] = useState<IssuePin | null>(null)
 
   // Mock map pins data
-  const issuePins = [
+  const issuePins: IssuePin[] = [
     { id: 1, lat: 51.2, lng: 4.4, title: "Pothole on Main St", status: "Critical" },
     { id: 2, lat: 51.22, lng: 4.42, title: "Broken Streetlight", status: "Warning" },
     { id: 3, lat: 51.18, lng: 4.38, title: "Graffiti on Bridge", status: "Warning" },

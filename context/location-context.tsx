@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, type ReactNode } from "react"
 
 interface Coordinates {
   lat: number
@@ -21,15 +21,10 @@ const LocationContext = createContext<LocationContextType | undefined>(undefined
 
 export function LocationProvider({ children, initialDistrict }: { children: ReactNode; initialDistrict?: string }) {
   const [location, setLocation] = useState<Coordinates | null>(null)
-  const [district, setDistrict] = useState<string | null>(initialDistrict || null)
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null)
+  const district = selectedDistrict ?? initialDistrict ?? null
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (initialDistrict) {
-      setDistrict(initialDistrict)
-    }
-  }, [initialDistrict])
 
   const reverseGeocode = async (lat: number, lng: number) => {
     try {
@@ -53,11 +48,11 @@ export function LocationProvider({ children, initialDistrict }: { children: Reac
         address.city_district ||
         "Unknown District"
 
-      setDistrict(detectedDistrict)
+      setSelectedDistrict(detectedDistrict)
     } catch (err) {
       console.error("Reverse geocoding failed:", err)
       // Fallback if API fails
-      setDistrict("Select District")
+      setSelectedDistrict("Select District")
     }
   }
 
@@ -91,13 +86,6 @@ export function LocationProvider({ children, initialDistrict }: { children: Reac
     )
   }
 
-  // Auto-detect on mount only if no initial district
-  useEffect(() => {
-    if (!initialDistrict) {
-      detectLocation()
-    }
-  }, [initialDistrict])
-
   return (
     <LocationContext.Provider
       value={{
@@ -106,7 +94,7 @@ export function LocationProvider({ children, initialDistrict }: { children: Reac
         isLoading,
         error,
         setLocation,
-        setDistrict,
+        setDistrict: setSelectedDistrict,
         detectLocation,
       }}
     >

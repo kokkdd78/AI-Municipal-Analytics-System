@@ -5,7 +5,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Trees, Lightbulb, Zap, MapPin, X, HelpCircle } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import dynamic from "next/dynamic"
 import { useData } from "@/context/data-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -39,7 +39,7 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
     }
 
     return data.display_name || coords
-  } catch (e) {
+  } catch {
     return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
   }
 }
@@ -59,16 +59,6 @@ export default function NewSuggestionProposal({ open, onOpenChange, district }: 
     lat: 21.5433,
     lng: 39.1728,
   })
-
-  useEffect(() => {
-    if (district) {
-      setSelectedAddress(district)
-      const districtObj = findDistrictByName(district)
-      if (districtObj) {
-        setSelectedDistrict(districtObj)
-      }
-    }
-  }, [district])
 
   const handleMapDrag = () => {
     setShowMap(true)
@@ -95,8 +85,10 @@ export default function NewSuggestionProposal({ open, onOpenChange, district }: 
           ? customCategory
           : CATEGORIES.find((c) => c.id === selectedCategory)?.label || "Suggestion",
       category: category,
-      lat: mapCenter?.lat || 21.5433,
-      lng: mapCenter?.lng || 39.1728,
+      location: {
+        lat: mapCenter?.lat || 21.5433,
+        lng: mapCenter?.lng || 39.1728,
+      },
       description,
       district: selectedDistrict,
       createdAt: new Date().toISOString(),
@@ -110,9 +102,6 @@ export default function NewSuggestionProposal({ open, onOpenChange, district }: 
     setSelectedDistrict(findDistrictByName(district) || JEDDAH_DISTRICTS[0])
     onOpenChange(false)
   }
-
-  const selectedCategoryData = CATEGORIES.find((c) => c.id === selectedCategory)
-  const IconComponent = selectedCategoryData?.icon || Trees
 
   if (showMap) {
     return (

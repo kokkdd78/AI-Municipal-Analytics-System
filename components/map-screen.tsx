@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import dynamic from "next/dynamic"
 import { useData } from "@/context/data-context"
 import { useUserLocation } from "@/context/location-context"
@@ -18,11 +18,6 @@ export default function MapScreen({ onNavigate }: { onNavigate: (tab: string) =>
   const { reports, upvoteReport, votedReports, suggestions, upvoteSuggestion, votedSuggestions } = useData()
   const { location } = useUserLocation()
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
-  const [isMounted, setIsMounted] = useState(false)
-
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
 
   const handlePinClick = (id: string, type: "report" | "suggestion") => {
     if (type === "report") {
@@ -31,8 +26,6 @@ export default function MapScreen({ onNavigate }: { onNavigate: (tab: string) =>
       upvoteSuggestion(id)
     }
   }
-
-  if (!isMounted) return <div className="h-full w-full bg-background" />
 
   return (
     <div className="h-full w-full relative">

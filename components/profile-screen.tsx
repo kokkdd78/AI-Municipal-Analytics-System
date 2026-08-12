@@ -13,15 +13,18 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { JEDDAH_DISTRICTS } from "@/constants/districts"
+import type { MunicipalUser } from "@/types/domain"
+import { useRouter } from "next/navigation"
+import { isReportOwnedByUser } from "@/lib/report-utils"
 
 export default function ProfileScreen({ onNavigate }: { onNavigate: (tab: string) => void }) {
   const { setUserRole } = useAuth()
+  const router = useRouter()
   const { user, reports, votedReports, suggestions, votedSuggestions, updateUser } = useData()
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
-  const [isReportsOpen, setIsReportsOpen] = useState(false)
 
   // Calculate stats
-  const myReportsCount = reports.filter((r) => r.authorId === user.name).length // Fixed calculation to filter reports by current user's authorId
+  const myReportsCount = reports.filter((report) => isReportOwnedByUser(report, user)).length
 
   const suggestionsMade = suggestions.length
   const totalInteractions = votedReports.size + votedSuggestions.size + suggestionsMade
@@ -33,7 +36,7 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (tab: string
       color: "bg-blue-100",
       textColor: "text-primary",
       icon: "📋",
-      onClick: () => setIsReportsOpen(true),
+      onClick: () => router.push("/my-reports"),
     },
     {
       label: "Suggestions Made",
@@ -101,13 +104,6 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (tab: string
           <Card
             className="p-4 flex items-center justify-between cursor-pointer hover:bg-red-50 transition-colors group"
             onClick={() => {
-              // Clear all app-related local storage
-              localStorage.removeItem("app_user")
-              localStorage.removeItem("app_reports")
-              localStorage.removeItem("app_voted_reports")
-              localStorage.removeItem("app_suggestions")
-              localStorage.removeItem("app_voted_suggestions")
-
               setUserRole(null)
               window.location.href = "/"
             }}
@@ -161,7 +157,12 @@ function EditProfileModal({
   onOpenChange,
   user,
   updateUser,
-}: { open: boolean; onOpenChange: (o: boolean) => void; user: any; updateUser: any }) {
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  user: MunicipalUser
+  updateUser: (updates: Partial<MunicipalUser>) => void
+}) {
   const [name, setName] = useState(user.name)
   const [district, setDistrict] = useState(user.district)
   const [avatar, setAvatar] = useState(user.avatar)

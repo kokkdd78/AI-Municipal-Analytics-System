@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useUserLocation } from "@/context/location-context"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -10,22 +10,15 @@ import { MapPin } from "lucide-react"
 
 export default function DistrictSelectorModal() {
   const { district, setDistrict, detectLocation, isLoading } = useUserLocation()
-  const [isOpen, setIsOpen] = useState(false)
+  const [isDismissed, setIsDismissed] = useState(false)
   const [selectedDistrict, setSelectedDistrict] = useState<District | null>(null)
-
-  // Show modal if district is not set or is "Select District"
-  useEffect(() => {
-    if (!district || district === "Select District" || district === "Unknown District") {
-      setIsOpen(true)
-    } else {
-      setIsOpen(false)
-    }
-  }, [district])
+  const needsDistrict = !district || district === "Select District" || district === "Unknown District"
+  const isOpen = needsDistrict && !isDismissed
 
   const handleConfirm = () => {
     if (selectedDistrict) {
       setDistrict(selectedDistrict.name)
-      setIsOpen(false)
+      setIsDismissed(true)
     }
   }
 
@@ -34,7 +27,7 @@ export default function DistrictSelectorModal() {
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && setIsDismissed(true)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Select Your District</DialogTitle>

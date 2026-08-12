@@ -15,7 +15,7 @@ export default function CrewTaskList() {
   const [currentScreen, setCurrentScreen] = useState<CrewScreen>("dashboard")
   const [shiftStarted, setShiftStarted] = useState(false)
 
-  const handleTaskClick = (taskId: number) => {
+  const handleTaskClick = () => {
     setCurrentScreen("task-execution")
   }
 
@@ -92,7 +92,7 @@ export default function CrewTaskList() {
         </div>
 
         <Card className="p-6 bg-card border-border">
-          <h2 className="text-xl font-bold text-foreground mb-4">Today's Shift</h2>
+          <h2 className="text-xl font-bold text-foreground mb-4">Today&apos;s Shift</h2>
           <p className="text-muted-foreground mb-6">
             {shiftStarted ? "Syncing with server..." : "Start your shift to view and complete tasks."}
           </p>

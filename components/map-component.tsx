@@ -3,10 +3,12 @@
 import { useEffect } from "react"
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet"
 import L from "leaflet"
-// @ts-ignore
 import "leaflet.heat"
 import { Button } from "@/components/ui/button"
 import { ThumbsUp } from "lucide-react"
+import { getReportPhotoUrl } from "@/lib/report-utils"
+import type { MapReport, Suggestion } from "@/types/domain"
+import Image from "next/image"
 
 // Fix for default marker icons
 const iconRetinaUrl = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png"
@@ -15,8 +17,8 @@ const shadowUrl = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/m
 
 interface MapComponentProps {
   center: { lat: number; lng: number } | [number, number]
-  reports?: any[]
-  suggestions?: any[]
+  reports?: MapReport[]
+  suggestions?: Suggestion[]
   suggestionsVisible?: boolean
   onPinClick?: (id: string, type: "report" | "suggestion") => void
   onCenterChange?: (lat: number, lng: number) => void
@@ -37,7 +39,7 @@ function CenterTracker({ onCenterChange }: { onCenterChange?: (lat: number, lng:
   return null
 }
 
-function HeatmapLayer({ reports }: { reports: any[] }) {
+function HeatmapLayer({ reports }: { reports: MapReport[] }) {
   const map = useMap()
 
   useEffect(() => {
@@ -49,13 +51,13 @@ function HeatmapLayer({ reports }: { reports: any[] }) {
 
     reports.forEach((report) => {
       // Round coordinates to create clusters
-      const clusterKey = `${Math.round(report.lat * 100)}_${Math.round(report.lng * 100)}`
+      const clusterKey = `${Math.round(report.location.lat * 100)}_${Math.round(report.location.lng * 100)}`
       clusters.set(clusterKey, (clusters.get(clusterKey) || 0) + 1)
     })
 
     // Create heatmap points with intensity based on cluster size
     const heatPoints: [number, number, number][] = reports.map((report) => {
-      const clusterKey = `${Math.round(report.lat * 100)}_${Math.round(report.lng * 100)}`
+      const clusterKey = `${Math.round(report.location.lat * 100)}_${Math.round(report.location.lng * 100)}`
       const clusterSize = clusters.get(clusterKey) || 1
 
       // Calculate intensity: higher for more clustered reports
@@ -68,10 +70,10 @@ function HeatmapLayer({ reports }: { reports: any[] }) {
         intensity = 0.5 // green/yellow zone
       }
 
-      return [report.lat, report.lng, intensity]
+      return [report.location.lat, report.location.lng, intensity]
     })
 
-    // @ts-ignore - leaflet.heat doesn't have TypeScript definitions
+    // @ts-expect-error leaflet.heat augments Leaflet without TypeScript declarations.
     const heatLayer = L.heatLayer(heatPoints, {
       radius: 40,
       blur: 25,
@@ -105,7 +107,7 @@ export default function MapComponent({
   votedSuggestions = new Set(),
 }: MapComponentProps) {
   useEffect(() => {
-    // @ts-ignore
+    // @ts-expect-error Leaflet keeps this internal icon URL helper off its public types.
     delete L.Icon.Default.prototype._getIconUrl
     L.Icon.Default.mergeOptions({
       iconRetinaUrl,
@@ -168,15 +170,25 @@ export default function MapComponent({
 
         <HeatmapLayer reports={reports} />
 
-        {reports.map((report) => (
-          <Marker key={`report-${report.id}`} position={[report.lat, report.lng]} icon={getMarkerIcon(report.votes)}>
+        {reports.map((report) => {
+          const photoUrl = report.attachments ? getReportPhotoUrl({ attachments: report.attachments }) : null
+
+          return (
+          <Marker
+            key={`report-${report.id}`}
+            position={[report.location.lat, report.location.lng]}
+            icon={getMarkerIcon(report.votes)}
+          >
             <Popup className="min-w-[200px]">
               <div className="space-y-2">
-                {report.photo && (
+                {photoUrl && (
                   <div className="w-full h-32 rounded-md overflow-hidden mb-2">
-                    <img
-                      src={report.photo || "/placeholder.svg"}
+                    <Image
+                      src={photoUrl}
                       alt={report.title}
+                      width={400}
+                      height={256}
+                      unoptimized
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -202,11 +214,16 @@ export default function MapComponent({
               </div>
             </Popup>
           </Marker>
-        ))}
+          )
+        })}
 
         {suggestionsVisible &&
           suggestions.map((suggestion) => (
-            <Marker key={`suggestion-${suggestion.id}`} position={[suggestion.lat, suggestion.lng]} icon={greenIcon}>
+            <Marker
+              key={`suggestion-${suggestion.id}`}
+              position={[suggestion.location.lat, suggestion.location.lng]}
+              icon={greenIcon}
+            >
               <Popup className="min-w-[200px]">
                 <div className="space-y-2">
                   <div>
