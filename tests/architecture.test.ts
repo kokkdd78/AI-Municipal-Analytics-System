@@ -86,7 +86,7 @@ describe("Phase 1 architecture guardrails", () => {
     }
   })
 
-  it("keeps Phase 2B2A server-only without starting the UI or storage transition", () => {
+  it("keeps Phase 2B2B client authentication server-authoritative and storage v2 isolated", () => {
     const storageSource = readFileSync(join(projectRoot, "lib", "client-storage.ts"), "utf8")
     const authContextSource = readFileSync(join(projectRoot, "context", "auth-context.tsx"), "utf8")
     const citizenLoginSource = readFileSync(join(projectRoot, "components", "login-screen.tsx"), "utf8")
@@ -94,12 +94,23 @@ describe("Phase 1 architecture guardrails", () => {
       join(projectRoot, "components", "employee-login-screen.tsx"),
       "utf8",
     )
+    const registrationSource = readFileSync(join(projectRoot, "components", "sign-up-screen.tsx"), "utf8")
+    const authClientSource = readFileSync(join(projectRoot, "lib", "auth", "client.ts"), "utf8")
 
-    expect(storageSource).toContain("version: 1")
-    expect(storageSource).not.toContain("profilesByUserId")
-    expect(authContextSource).toContain("setUserRole")
-    expect(citizenLoginSource).toContain("InputOTP")
-    expect(employeeLoginSource).toContain("employeeRole")
+    expect(storageSource).toContain("version: 2")
+    expect(storageSource).toContain("profilesByUserId")
+    expect(authContextSource).not.toContain("setUserRole")
+    expect(authContextSource).not.toContain("storedState.role")
+    expect(authContextSource).toContain("getMunicipalSession")
+    expect(citizenLoginSource).not.toMatch(/InputOTP|one-time|verification code/i)
+    expect(citizenLoginSource).toContain("loginCitizen")
+    expect(registrationSource).not.toMatch(/InputOTP|one-time|verification code/i)
+    expect(registrationSource).toContain("JEDDAH_DISTRICTS")
+    expect(registrationSource).toContain("registerCitizen")
+    expect(employeeLoginSource).not.toMatch(/employeeRole|setEmployeeRole|Manager<\/span>|Field Crew<\/span>/)
+    expect(employeeLoginSource).toContain("loginStaff")
+    expect(authClientSource).toContain('MUNICIPAL_AUTH_ENDPOINT = "/api/auth/municipal"')
+    expect(authClientSource).not.toMatch(/better-auth|generated\/prisma|@\/lib\/db|identifiers/)
 
     const protectedWrappers = [
       "app/citizen-app/page.tsx",
@@ -119,9 +130,10 @@ describe("Phase 1 architecture guardrails", () => {
       ...collectSourceFiles(join(projectRoot, "components")),
       ...collectSourceFiles(join(projectRoot, "context")),
       join(projectRoot, "lib", "client-storage.ts"),
+      join(projectRoot, "lib", "auth", "client.ts"),
     ]
     for (const file of municipalClientFiles) {
-      expect(readFileSync(file, "utf8")).not.toMatch(/(?:@\/lib\/db\/prisma|@prisma\/client)/)
+      expect(readFileSync(file, "utf8")).not.toMatch(/(?:@\/lib\/db\/prisma|@prisma\/client|generated\/prisma)/)
     }
   })
 })

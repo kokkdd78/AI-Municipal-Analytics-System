@@ -10,6 +10,7 @@ import { useData } from "@/context/data-context"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import dynamic from "next/dynamic"
 import { reportStatusStep } from "@/lib/report-utils"
+import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 
 const MapComponent = dynamic(() => import("@/components/map-component"), {
   ssr: false,
@@ -28,6 +29,14 @@ interface ReportTrackingView {
 }
 
 export default function ReportTrackingPage() {
+  return (
+    <AuthenticatedRoleBoundary role="Citizen">
+      <ReportTrackingContent />
+    </AuthenticatedRoleBoundary>
+  )
+}
+
+function ReportTrackingContent() {
   const params = useParams()
   const router = useRouter()
   const { reports } = useData()

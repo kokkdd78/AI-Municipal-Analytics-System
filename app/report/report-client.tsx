@@ -11,8 +11,17 @@ import { useToast } from "@/hooks/use-toast"
 import { DuplicateDetectionModal } from "@/components/duplicate-detection-modal"
 import { X, MapPin, Trash2, Lightbulb, AlertCircle, Camera } from "lucide-react"
 import Image from "next/image"
+import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 
 export default function ReportPage() {
+  return (
+    <AuthenticatedRoleBoundary role="Citizen">
+      <ReportPageContent />
+    </AuthenticatedRoleBoundary>
+  )
+}
+
+function ReportPageContent() {
   const { toast } = useToast()
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [description, setDescription] = useState("")

@@ -10,20 +10,21 @@ import ProfileScreen from "./profile-screen"
 import { Home, Map, Lightbulb, User } from "lucide-react"
 import { LocationProvider } from "@/context/location-context"
 import DistrictSelectorModal from "@/components/district-selector-modal"
-import { useAuth } from "@/context/auth-context"
 import { useData } from "@/context/data-context"
 import { isReportOwnedByUser } from "@/lib/report-utils"
-
-import OnboardingWalkthrough from "./onboarding-walkthrough"
+import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
 
 export default function CitizenApp() {
-  const { userRole } = useAuth()
+  return (
+    <AuthenticatedRoleBoundary role="Citizen">
+      <CitizenProfileApp />
+    </AuthenticatedRoleBoundary>
+  )
+}
+
+function CitizenProfileApp() {
   const { user } = useData()
-
-  if (!userRole) {
-    return <OnboardingWalkthrough />
-  }
-
+  if (!user) return <div className="min-h-screen bg-background" aria-hidden="true" />
   return (
     <LocationProvider initialDistrict={user?.district}>
       <CitizenAppContent />
@@ -37,7 +38,9 @@ function CitizenAppContent() {
   const { reports, addReport } = useData()
 
   const { user } = useData()
-  const myReportsCount = reports.filter((report) => isReportOwnedByUser(report, user)).length
+  const myReportsCount = user
+    ? reports.filter((report) => isReportOwnedByUser(report, user)).length
+    : 0
 
   const renderScreen = () => {
     switch (activeTab) {

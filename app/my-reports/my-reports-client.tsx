@@ -9,13 +9,24 @@ import StaticMap from "@/components/static-map"
 import { useData } from "@/context/data-context"
 import { formatReportStatus, isReportOwnedByUser } from "@/lib/report-utils"
 import type { ReportStatus } from "@/types/domain"
+import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 
 export default function MyReportsPage() {
+  return (
+    <AuthenticatedRoleBoundary role="Citizen">
+      <MyReportsContent />
+    </AuthenticatedRoleBoundary>
+  )
+}
+
+function MyReportsContent() {
   const router = useRouter()
   const { reports: allReports, user } = useData()
-  const reports = allReports
-    .filter((report) => isReportOwnedByUser(report, user))
-    .toSorted((first, second) => second.createdAt.localeCompare(first.createdAt))
+  const reports = user
+    ? allReports
+        .filter((report) => isReportOwnedByUser(report, user))
+        .toSorted((first, second) => second.createdAt.localeCompare(first.createdAt))
+    : []
 
   const getStatusBadgeVariant = (status: ReportStatus) => {
     switch (status) {

@@ -24,6 +24,7 @@
     "test:auth": "vitest run tests/auth-identifiers.test.ts tests/auth-authorization.test.ts tests/auth-config.test.ts",
     "test:auth:integration": "vitest run tests/auth.integration.test.ts",
     "test:auth:2b2a": "vitest run tests/auth-route-policy.test.ts tests/proxy.test.ts tests/report-status-route.test.ts tests/auth-http.integration.test.ts",
+    "test:auth:2b2b": "vitest run tests/auth-client.test.ts tests/auth-form-operation.test.ts tests/auth-ui.test.ts tests/client-storage.test.ts tests/architecture.test.ts",
     "test:db": "vitest run --maxWorkers=1 tests/database.integration.test.ts tests/auth.integration.test.ts"
   },
   "dependencies": {

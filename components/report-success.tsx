@@ -4,12 +4,21 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2 } from "lucide-react"
+import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
 
 interface ReportSuccessProps {
   reportId?: string
 }
 
 export default function ReportSuccess({ reportId: propReportId }: ReportSuccessProps) {
+  return (
+    <AuthenticatedRoleBoundary role="Citizen">
+      <ReportSuccessContent reportId={propReportId} />
+    </AuthenticatedRoleBoundary>
+  )
+}
+
+function ReportSuccessContent({ reportId: propReportId }: ReportSuccessProps) {
   const router = useRouter()
   const reportId = propReportId
 

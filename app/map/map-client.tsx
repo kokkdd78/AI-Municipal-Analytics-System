@@ -10,12 +10,21 @@ import { getReportPhotoUrl } from "@/lib/report-utils"
 import type { Report } from "@/types/domain"
 import Image from "next/image"
 import { handleStandaloneMapPinAction } from "@/lib/map-actions"
+import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 
 const MapComponent = dynamic(() => import("../../components/map-component"), {
   ssr: false,
 })
 
 export default function MapPage() {
+  return (
+    <AuthenticatedRoleBoundary role="Citizen">
+      <MapPageContent />
+    </AuthenticatedRoleBoundary>
+  )
+}
+
+function MapPageContent() {
   const { reports, suggestions, votedReports, votedSuggestions, upvoteSuggestion } = useData()
   const [activeTab, setActiveTab] = useState("map")
   const [selectedReport, setSelectedReport] = useState<Report | null>(null)

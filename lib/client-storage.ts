@@ -27,9 +27,12 @@ export const LEGACY_STORAGE_KEYS = [
 export type ClientStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">
 
 export interface AppStorageState {
-  version: 1
+  version: 2
+  /** Deprecated compatibility projection. Never use this field for authorization. */
   role: UserRole | null
-  user: MunicipalUser | null
+  profilesByUserId: Record<string, MunicipalUser>
+  /** Non-authoritative projection selected only from a live Citizen session. */
+  activeProfileId: string | null
   reports: Report[]
   votedReportIds: string[]
   suggestions: Suggestion[]
@@ -37,9 +40,10 @@ export interface AppStorageState {
 }
 
 export const EMPTY_APP_STORAGE: AppStorageState = {
-  version: 1,
+  version: 2,
   role: null,
-  user: null,
+  profilesByUserId: {},
+  activeProfileId: null,
   reports: [],
   votedReportIds: [],
   suggestions: [],
@@ -555,9 +559,52 @@ function normalizeReportOwners(reports: Report[], user: MunicipalUser | null, kn
   )
 }
 
-function normalizeStorageState(value: unknown, knownOwnerNames: string[] = []): AppStorageState {
+interface NormalizedProfiles {
+  profilesByUserId: Record<string, MunicipalUser>
+  migratedSingleProfile: MunicipalUser | null
+}
+
+function normalizeProfiles(record: Record<string, unknown>, legacyUser: unknown = null): NormalizedProfiles {
+  const rawProfiles = new Map<string, Record<string, unknown>>()
+  if (isRecord(record.profilesByUserId)) {
+    for (const [rawId, rawProfile] of Object.entries(record.profilesByUserId)) {
+      const id = nonEmptyString(rawId)
+      if (!id || !isRecord(rawProfile)) continue
+      rawProfiles.set(id, { ...rawProfile, id })
+    }
+  }
+
+  const rawSingleProfile = mergeRawUser(record.user, legacyUser)
+  const normalizedSingleProfile = normalizeUser(rawSingleProfile)
+  if (rawSingleProfile && normalizedSingleProfile) {
+    const existing = rawProfiles.get(normalizedSingleProfile.id)
+    rawProfiles.set(
+      normalizedSingleProfile.id,
+      existing ? mergeRawUser(existing, rawSingleProfile) ?? existing : rawSingleProfile,
+    )
+  }
+
+  let profilesByUserId: Record<string, MunicipalUser> = {}
+  for (const [id, rawProfile] of rawProfiles) {
+    const profile = normalizeUser({ ...rawProfile, id })
+    if (profile) profilesByUserId = { ...profilesByUserId, [id]: { ...profile, id } }
+  }
+
+  return {
+    profilesByUserId,
+    migratedSingleProfile: normalizedSingleProfile
+      ? profilesByUserId[normalizedSingleProfile.id] ?? normalizedSingleProfile
+      : null,
+  }
+}
+
+function normalizeStorageState(
+  value: unknown,
+  legacyUser: unknown = null,
+  knownOwnerNames: string[] = [],
+): AppStorageState {
   const record = isRecord(value) ? value : {}
-  const user = normalizeUser(record.user)
+  const { profilesByUserId, migratedSingleProfile } = normalizeProfiles(record, legacyUser)
   const reports = Array.isArray(record.reports)
     ? record.reports.map(normalizeReport).filter((report): report is Report => report !== null)
     : []
@@ -565,11 +612,15 @@ function normalizeStorageState(value: unknown, knownOwnerNames: string[] = []): 
     ? record.suggestions.map(normalizeSuggestion).filter((suggestion): suggestion is Suggestion => suggestion !== null)
     : []
 
+  const activeProfileId = nonEmptyString(record.activeProfileId)
+
   return {
-    version: 1,
-    role: Object.hasOwn(record, "role") ? normalizeRole(record.role) : user?.role ?? null,
-    user,
-    reports: normalizeReportOwners(deduplicateReports(reports), user, knownOwnerNames),
+    version: 2,
+    role: Object.hasOwn(record, "role") ? normalizeRole(record.role) : migratedSingleProfile?.role ?? null,
+    profilesByUserId,
+    activeProfileId:
+      activeProfileId && Object.hasOwn(profilesByUserId, activeProfileId) ? activeProfileId : null,
+    reports: normalizeReportOwners(deduplicateReports(reports), migratedSingleProfile, knownOwnerNames),
     votedReportIds: uniqueStrings(record.votedReportIds),
     suggestions: deduplicateSuggestions(suggestions),
     votedSuggestionIds: uniqueStrings(record.votedSuggestionIds),
@@ -587,7 +638,8 @@ export function mergeAppStorage(
   return {
     ...current,
     ...updates,
-    version: 1,
+    version: 2,
+    profilesByUserId: updates.profilesByUserId ?? current.profilesByUserId,
     reports: updates.reports ?? current.reports,
     votedReportIds: updates.votedReportIds ?? current.votedReportIds,
     suggestions: updates.suggestions ?? current.suggestions,
@@ -640,11 +692,10 @@ export function migrateLegacyAppStorage(storage: ClientStorage): AppStorageState
   )
   const hasLegacyData = [...legacyRawValues.values()].some((value) => value !== null)
   const canonicalRecord = isRecord(parsedCanonical) ? parsedCanonical : {}
-  const rawCanonicalUser = canonicalRecord.user
   const rawLegacyUser = safeJsonParse(legacyRawValues.get("app_user") ?? null)
+  const rawCanonicalUser = canonicalRecord.user
   const canonicalUser = normalizeUser(rawCanonicalUser)
   const legacyUser = normalizeUser(rawLegacyUser)
-  const user = normalizeUser(mergeRawUser(rawCanonicalUser, rawLegacyUser))
   const ownerNames = [canonicalUser?.name, legacyUser?.name].filter(
     (name): name is string => Boolean(name),
   )
@@ -657,19 +708,19 @@ export function migrateLegacyAppStorage(storage: ClientStorage): AppStorageState
     Array.isArray(canonicalRecord.reports) ? canonicalRecord.reports : [],
     rawLegacyReports,
   ])
-  const reports = rawReports.map(normalizeReport).filter((report): report is Report => report !== null)
   const legacySuggestions = parsedArray(storage, "app_suggestions")
     .map(normalizeSuggestion)
     .filter((suggestion): suggestion is Suggestion => suggestion !== null)
+  const normalizedCanonicalAndLegacy = normalizeStorageState(
+    { ...canonicalRecord, reports: rawReports },
+    rawLegacyUser,
+    ownerNames,
+  )
   const migratedState: AppStorageState = {
-    version: 1,
+    ...normalizedCanonicalAndLegacy,
+    version: 2,
     role: migratedRole(parsedCanonical, storage),
-    user,
-    reports: normalizeReportOwners(
-      deduplicateReports(reports),
-      user,
-      ownerNames,
-    ),
+    reports: normalizedCanonicalAndLegacy.reports,
     votedReportIds: [
       ...new Set([
         ...canonicalState.votedReportIds,
@@ -748,12 +799,122 @@ export function updateAppStorage(updates: Partial<AppStorageState>): AppStorageS
   return nextState
 }
 
+export interface MunicipalSessionProfile {
+  id: string
+  name: string
+  role: UserRole
+  phone: string | null
+  avatarUrl: string | null
+  district: { id: string; name: string } | null
+}
+
+export function getProfileForAuthenticatedUser(
+  state: AppStorageState,
+  authenticatedUserId: string,
+): MunicipalUser | null {
+  const id = nonEmptyString(authenticatedUserId)
+  return id && Object.hasOwn(state.profilesByUserId, id) ? state.profilesByUserId[id] : null
+}
+
+function persistProjection(
+  current: AppStorageState,
+  nextState: AppStorageState,
+  storage: ClientStorage,
+  notify: boolean,
+): AppStorageState {
+  try {
+    storage.setItem(APP_STORAGE_KEY, JSON.stringify(nextState))
+  } catch {
+    return current
+  }
+
+  if (notify) notifyAppStorageChange()
+  return nextState
+}
+
+export function applyMunicipalSessionProjection(
+  sessionUser: MunicipalSessionProfile,
+  storageOverride?: ClientStorage,
+): AppStorageState {
+  const storage = storageOverride ?? browserStorage()
+  if (!storage) return { ...EMPTY_APP_STORAGE }
+
+  const current = migrateLegacyAppStorage(storage)
+  if (sessionUser.role !== "Citizen") {
+    const nextState = mergeAppStorage(current, {
+      role: sessionUser.role,
+      activeProfileId: null,
+    })
+    return persistProjection(current, nextState, storage, !storageOverride)
+  }
+
+  const id = nonEmptyString(sessionUser.id)
+  const serverName = nonEmptyString(sessionUser.name)
+  if (!id || !serverName) return current
+
+  const existing = Object.hasOwn(current.profilesByUserId, id) ? current.profilesByUserId[id] : undefined
+  const serverDistrict = nonEmptyString(sessionUser.district?.name)
+  const serverAvatar = nonEmptyString(sessionUser.avatarUrl)
+  const serverPhone = nonEmptyString(sessionUser.phone)
+  const profile: MunicipalUser = {
+    id,
+    name: existing?.name ?? serverName,
+    district:
+      existing?.district && existing.district !== "Unknown District"
+        ? existing.district
+        : serverDistrict ?? existing?.district ?? "Unknown District",
+    avatar: existing?.avatar ?? serverAvatar ?? "/placeholder-user.jpg",
+    role: "Citizen",
+    ...(serverPhone ? { phone: serverPhone } : {}),
+  }
+  const nextState = mergeAppStorage(current, {
+    role: "Citizen",
+    activeProfileId: id,
+    profilesByUserId: { ...current.profilesByUserId, [id]: profile },
+  })
+  return persistProjection(current, nextState, storage, !storageOverride)
+}
+
+export function updateProfileForAuthenticatedUser(
+  authenticatedUserId: string,
+  updates: Pick<Partial<MunicipalUser>, "name" | "district" | "avatar">,
+  storageOverride?: ClientStorage,
+): AppStorageState {
+  const storage = storageOverride ?? browserStorage()
+  if (!storage) return { ...EMPTY_APP_STORAGE }
+
+  const current = migrateLegacyAppStorage(storage)
+  const id = nonEmptyString(authenticatedUserId)
+  const existing = id && Object.hasOwn(current.profilesByUserId, id) ? current.profilesByUserId[id] : null
+  if (!id || !existing) return current
+
+  const nextProfile: MunicipalUser = {
+    ...existing,
+    ...(nonEmptyString(updates.name) ? { name: nonEmptyString(updates.name)! } : {}),
+    ...(nonEmptyString(updates.district) ? { district: nonEmptyString(updates.district)! } : {}),
+    ...(nonEmptyString(updates.avatar) ? { avatar: nonEmptyString(updates.avatar)! } : {}),
+    id,
+  }
+  const nextState = mergeAppStorage(current, {
+    profilesByUserId: { ...current.profilesByUserId, [id]: nextProfile },
+  })
+  return persistProjection(current, nextState, storage, !storageOverride)
+}
+
 export function clearAppSession(storageOverride?: ClientStorage): AppStorageState {
   const storage = storageOverride ?? browserStorage()
   if (!storage) return { ...EMPTY_APP_STORAGE }
 
-  const nextState = mergeAppStorage(migrateLegacyAppStorage(storage), { role: null })
-  storage.setItem(APP_STORAGE_KEY, JSON.stringify(nextState))
+  const current = migrateLegacyAppStorage(storage)
+  const nextState = mergeAppStorage(current, {
+    role: null,
+    activeProfileId: null,
+  })
+  try {
+    storage.setItem(APP_STORAGE_KEY, JSON.stringify(nextState))
+  } catch {
+    return current
+  }
 
   if (!storageOverride) notifyAppStorageChange()
   return nextState

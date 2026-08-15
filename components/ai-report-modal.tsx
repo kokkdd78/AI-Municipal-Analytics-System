@@ -83,6 +83,11 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
   }
 
   const handleSubmit = () => {
+    if (!user) {
+      toast({ title: "Session Required", description: "Please sign in again before submitting a report.", variant: "destructive" })
+      return
+    }
+
     if (!description.trim()) {
       toast({
         title: "Description Required",

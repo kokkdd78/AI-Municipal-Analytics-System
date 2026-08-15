@@ -1,12 +1,15 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useAuth } from "@/context/auth-context"
 import { LogOut, Map, FileText, PenTool, AlertCircle, MapPin, Truck, ChevronDown } from "lucide-react"
 import WorkOrdersScreen from "./work-orders-screen"
 import UrbanPlanningScreen from "./urban-planning-screen"
+import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
+import { municipalAuthFailureMessage } from "@/lib/auth/client"
 
 interface IssuePin {
   id: number
@@ -17,11 +20,36 @@ interface IssuePin {
 }
 
 export default function ManagerDashboard() {
-  const { setUserRole } = useAuth()
+  return (
+    <AuthenticatedRoleBoundary role="Manager">
+      <ManagerDashboardContent />
+    </AuthenticatedRoleBoundary>
+  )
+}
+
+function ManagerDashboardContent() {
+  const router = useRouter()
+  const { signOut, user } = useAuth()
   const [activeMenu, setActiveMenu] = useState("Operations")
   const [showAlerts, setShowAlerts] = useState(true)
   const [mapLayer, setMapLayer] = useState("Show All")
   const [selectedPin, setSelectedPin] = useState<IssuePin | null>(null)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return
+    setIsSigningOut(true)
+    setLogoutError(null)
+    const result = await signOut()
+    if (!result.ok) {
+      setLogoutError(municipalAuthFailureMessage(result))
+      setIsSigningOut(false)
+      return
+    }
+    router.replace("/auth")
+    router.refresh()
+  }
 
   // Mock map pins data
   const issuePins: IssuePin[] = [
@@ -78,15 +106,17 @@ export default function ManagerDashboard() {
             <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
               F
             </div>
-            <span className="text-sm text-white">Fatimah (Manager)</span>
+            <span className="text-sm text-white">{user?.name ?? "Manager"} (Manager)</span>
           </div>
           <button
-            onClick={() => setUserRole(null)}
+            onClick={handleSignOut}
+            disabled={isSigningOut}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-sm"
           >
             <LogOut className="h-4 w-4" />
-            Logout
+            {isSigningOut ? "Signing out..." : "Logout"}
           </button>
+          {logoutError && <p role="alert" className="px-4 text-xs text-red-300">{logoutError}</p>}
         </div>
       </div>
 

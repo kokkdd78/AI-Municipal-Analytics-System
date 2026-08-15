@@ -83,6 +83,15 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
   }
 
   const saveReport = async () => {
+    if (!user) {
+      toast({
+        title: "Session Required",
+        description: "Please sign in again before submitting a report.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1500))

@@ -16,12 +16,31 @@ import { JEDDAH_DISTRICTS } from "@/constants/districts"
 import type { MunicipalUser } from "@/types/domain"
 import { useRouter } from "next/navigation"
 import { isReportOwnedByUser } from "@/lib/report-utils"
+import { municipalAuthFailureMessage } from "@/lib/auth/client"
 
 export default function ProfileScreen({ onNavigate }: { onNavigate: (tab: string) => void }) {
-  const { setUserRole } = useAuth()
+  const { signOut } = useAuth()
   const router = useRouter()
   const { user, reports, votedReports, suggestions, votedSuggestions, updateUser } = useData()
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
+
+  if (!user) return <div className="h-full bg-background" aria-hidden="true" />
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return
+    setIsSigningOut(true)
+    setLogoutError(null)
+    const result = await signOut()
+    if (!result.ok) {
+      setLogoutError(municipalAuthFailureMessage(result))
+      setIsSigningOut(false)
+      return
+    }
+    router.replace("/auth")
+    router.refresh()
+  }
 
   // Calculate stats
   const myReportsCount = reports.filter((report) => isReportOwnedByUser(report, user)).length
@@ -103,14 +122,15 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (tab: string
           </Card>
           <Card
             className="p-4 flex items-center justify-between cursor-pointer hover:bg-red-50 transition-colors group"
-            onClick={() => {
-              setUserRole(null)
-              window.location.href = "/"
-            }}
+            onClick={handleSignOut}
+            aria-disabled={isSigningOut}
           >
-            <span className="text-sm text-red-600 font-medium group-hover:text-red-700">Sign Out</span>
+            <span className="text-sm text-red-600 font-medium group-hover:text-red-700">
+              {isSigningOut ? "Signing out..." : "Sign Out"}
+            </span>
             <LogOut className="h-4 w-4 text-red-500 group-hover:text-red-600" />
           </Card>
+          {logoutError && <p role="alert" className="text-sm text-red-600">{logoutError}</p>}
         </div>
 
         {/* Preferences */}

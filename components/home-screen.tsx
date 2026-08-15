@@ -22,6 +22,8 @@ export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps)
   const [showReportModal, setShowReportModal] = useState(false)
   const [showAiReportModal, setShowAiReportModal] = useState(false)
 
+  if (!user) return <div className="h-full bg-background" aria-hidden="true" />
+
   const firstName = user.name.split(" ")[0] || "User"
   const initials =
     user.name

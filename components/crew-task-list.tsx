@@ -1,19 +1,47 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useAuth } from "@/context/auth-context"
 import { LogOut, CheckCircle2, Clock } from "lucide-react"
 import CrewRouteScreen from "./crew-route-screen"
 import TaskExecutionScreen from "./task-execution-screen"
+import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
+import { municipalAuthFailureMessage } from "@/lib/auth/client"
 
 type CrewScreen = "dashboard" | "route" | "task-execution" | "completion-camera"
 
 export default function CrewTaskList() {
-  const { setUserRole } = useAuth()
+  return (
+    <AuthenticatedRoleBoundary role="Crew">
+      <CrewTaskListContent />
+    </AuthenticatedRoleBoundary>
+  )
+}
+
+function CrewTaskListContent() {
+  const router = useRouter()
+  const { signOut, user } = useAuth()
   const [currentScreen, setCurrentScreen] = useState<CrewScreen>("dashboard")
   const [shiftStarted, setShiftStarted] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return
+    setIsSigningOut(true)
+    setLogoutError(null)
+    const result = await signOut()
+    if (!result.ok) {
+      setLogoutError(municipalAuthFailureMessage(result))
+      setIsSigningOut(false)
+      return
+    }
+    router.replace("/auth")
+    router.refresh()
+  }
 
   const handleTaskClick = () => {
     setCurrentScreen("task-execution")
@@ -58,16 +86,18 @@ export default function CrewTaskList() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Field Tasks</h1>
-            <p className="text-muted-foreground">Welcome, Khalid</p>
+            <p className="text-muted-foreground">Welcome, {user?.name ?? "Crew Member"}</p>
           </div>
           <button
-            onClick={() => setUserRole(null)}
+            onClick={handleSignOut}
+            disabled={isSigningOut}
             className="p-2 hover:bg-accent rounded-lg transition-colors"
             title="Logout"
           >
             <LogOut className="h-5 w-5 text-muted-foreground hover:text-foreground" />
           </button>
         </div>
+        {logoutError && <p role="alert" className="mb-4 text-sm text-red-600">{logoutError}</p>}
 
         <div className="grid md:grid-cols-2 gap-4 mb-8">
           <Card className="p-6 bg-card border-border">

@@ -3,16 +3,19 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react"
 import {
   applySuggestionVote,
+  getProfileForAuthenticatedUser,
   getAppStorageSnapshot,
   parseAppStorage,
   subscribeAppStorage,
+  updateProfileForAuthenticatedUser,
   updateAppStorage,
 } from "@/lib/client-storage"
+import { useAuth } from "@/context/auth-context"
 import type { MunicipalUser, Report, Suggestion } from "@/types/domain"
 
 interface DataContextType {
-  user: MunicipalUser
-  updateUser: (updates: Partial<MunicipalUser>) => void
+  user: MunicipalUser | null
+  updateUser: (updates: Pick<Partial<MunicipalUser>, "name" | "district" | "avatar">) => void
   reports: Report[]
   addReport: (report: Report) => void
   upvoteReport: (id: string) => void
@@ -24,14 +27,6 @@ interface DataContextType {
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
-
-const DEFAULT_USER: MunicipalUser = {
-  id: "demo-citizen",
-  name: "Ayman AlJenidi",
-  district: "Al-Naeem",
-  avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Ayman",
-  role: "Citizen",
-}
 
 const DEFAULT_REPORTS: Report[] = [
   {
@@ -73,9 +68,13 @@ const DEFAULT_REPORTS: Report[] = [
 ]
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const { user: authenticatedUser } = useAuth()
   const rawStorage = useSyncExternalStore(subscribeAppStorage, getAppStorageSnapshot, () => null)
   const storedState = useMemo(() => parseAppStorage(rawStorage), [rawStorage])
-  const user = storedState.user ?? DEFAULT_USER
+  const user =
+    authenticatedUser?.role === "Citizen"
+      ? getProfileForAuthenticatedUser(storedState, authenticatedUser.id)
+      : null
   const reports = storedState.reports.length > 0 ? storedState.reports : DEFAULT_REPORTS
   const votedReports = useMemo(() => new Set(storedState.votedReportIds), [storedState.votedReportIds])
   const suggestions = storedState.suggestions
@@ -84,12 +83,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [storedState.votedSuggestionIds],
   )
 
-  const updateUser = (updates: Partial<MunicipalUser>) => {
-    updateAppStorage({ user: { ...user, ...updates } })
+  const updateUser = (updates: Pick<Partial<MunicipalUser>, "name" | "district" | "avatar">) => {
+    if (!authenticatedUser || authenticatedUser.role !== "Citizen") return
+    updateProfileForAuthenticatedUser(authenticatedUser.id, updates)
   }
 
   const addReport = (report: Report) => {
-    updateAppStorage({ reports: [...reports, report] })
+    if (!authenticatedUser || authenticatedUser.role !== "Citizen" || !user) return
+    updateAppStorage({ reports: [...reports, { ...report, authorId: authenticatedUser.id }] })
   }
 
   const upvoteReport = (id: string) => {

@@ -4,10 +4,13 @@ import {
   APP_STORAGE_KEY,
   EMPTY_APP_STORAGE,
   LEGACY_STORAGE_KEYS,
+  applyMunicipalSessionProjection,
   clearAppSession,
+  getProfileForAuthenticatedUser,
   mergeAppStorage,
   migrateLegacyAppStorage,
   parseAppStorage,
+  updateProfileForAuthenticatedUser,
   type ClientStorage,
 } from "../lib/client-storage"
 import type { AppStorageState } from "../lib/client-storage"
@@ -143,17 +146,19 @@ describe("temporary application storage", () => {
     storage.setItem("app_voted_suggestions", JSON.stringify(["suggestion-1", "suggestion-1"]))
 
     const migrated = migrateLegacyAppStorage(storage)
+    const migratedProfile = Object.values(migrated.profilesByUserId)[0]
 
+    expect(migrated.version).toBe(2)
     expect(migrated.role).toBe("Citizen")
-    expect(migrated.user?.name).toBe("Ayman AlJenidi")
+    expect(migratedProfile?.name).toBe("Ayman AlJenidi")
     expect(migrated.reports).toHaveLength(2)
     expect(migrated.reports.find((report) => report.id === "report-1")).toMatchObject({
       description: "Detailed citizen description",
       votes: 3,
-      authorId: migrated.user?.id,
+      authorId: migratedProfile?.id,
     })
     expect(migrated.reports.find((report) => report.id === "report-1")?.attachments).toHaveLength(1)
-    expect(migrated.reports.find((report) => report.id === "report-2")?.authorId).toBe(migrated.user?.id)
+    expect(migrated.reports.find((report) => report.id === "report-2")?.authorId).toBe(migratedProfile?.id)
     expect(migrated.votedReportIds).toEqual(["report-1", "report-2"])
     expect(migrated.suggestions).toHaveLength(1)
     expect(migrated.suggestions[0].votes).toBe(5)
@@ -319,7 +324,7 @@ describe("temporary application storage", () => {
 
     const migrated = migrateLegacyAppStorage(storage)
 
-    expect(migrated.user).toEqual({
+    expect(migrated.profilesByUserId["citizen-42"]).toEqual({
       id: "citizen-42",
       name: "Updated Name",
       phone: "+966500000000",
@@ -430,18 +435,51 @@ describe("temporary application storage", () => {
     expect(storage.getItem(APP_STORAGE_KEY)).toBeNull()
   })
 
+  it("preserves the prior v1 envelope and legacy keys when the v2 write fails", () => {
+    const originalCanonical = JSON.stringify({
+      version: 1,
+      role: "Citizen",
+      user: { id: "citizen-1", name: "Ayman", district: "Al-Naeem", avatar: "/avatar.jpg" },
+      reports: [canonicalReport],
+      votedReportIds: ["report-1"],
+      suggestions: [],
+      votedSuggestionIds: [],
+    })
+    const values = new Map<string, string>([
+      [APP_STORAGE_KEY, originalCanonical],
+      ["app_voted_reports", JSON.stringify(["report-2"])],
+    ])
+    const storage: ClientStorage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: () => {
+        throw new Error("Storage quota exceeded")
+      },
+      removeItem: (key) => values.delete(key),
+    }
+
+    const migrated = migrateLegacyAppStorage(storage)
+
+    expect(migrated.version).toBe(2)
+    expect(migrated.votedReportIds).toEqual(["report-1", "report-2"])
+    expect(storage.getItem(APP_STORAGE_KEY)).toBe(originalCanonical)
+    expect(storage.getItem("app_voted_reports")).toBe(JSON.stringify(["report-2"]))
+  })
+
   it("clears only the role when signing out", () => {
     const storage = new MemoryStorage()
     const state: AppStorageState = {
-      version: 1,
+      version: 2,
       role: "Citizen",
-      user: {
-        id: "citizen-1",
-        name: "Ayman",
-        district: "Al-Naeem",
-        avatar: "/avatar.jpg",
-        role: "Citizen",
+      profilesByUserId: {
+        "citizen-1": {
+          id: "citizen-1",
+          name: "Ayman",
+          district: "Al-Naeem",
+          avatar: "/avatar.jpg",
+          role: "Citizen",
+        },
       },
+      activeProfileId: "citizen-1",
       reports: [canonicalReport],
       votedReportIds: [canonicalReport.id],
       suggestions: [
@@ -465,10 +503,218 @@ describe("temporary application storage", () => {
 
     expect(signedOut.role).toBeNull()
     expect(reread.role).toBeNull()
-    expect(reread.user).toEqual(state.user)
+    expect(signedOut.activeProfileId).toBeNull()
+    expect(reread.activeProfileId).toBeNull()
+    expect(reread.profilesByUserId).toEqual(state.profilesByUserId)
     expect(reread.reports).toEqual(state.reports)
     expect(reread.votedReportIds).toEqual(state.votedReportIds)
     expect(reread.suggestions).toEqual(state.suggestions)
     expect(reread.votedSuggestionIds).toEqual(state.votedSuggestionIds)
+  })
+
+  it("migrates a v1 profile into the v2 profile map losslessly and idempotently", () => {
+    const storage = new MemoryStorage()
+    storage.setItem(
+      APP_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        role: "Citizen",
+        user: {
+          id: "demo-citizen",
+          name: "Local Demo Name",
+          phone: "+966500000001",
+          district: "Al-Naeem",
+          avatar: "data:image/png;base64,avatar",
+          role: "Citizen",
+        },
+        reports: [{ ...canonicalReport, authorId: "demo-citizen" }],
+        votedReportIds: ["report-1"],
+        suggestions: [],
+        votedSuggestionIds: ["suggestion-1"],
+      }),
+    )
+
+    const first = migrateLegacyAppStorage(storage)
+    const serialized = storage.getItem(APP_STORAGE_KEY)
+    const second = migrateLegacyAppStorage(storage)
+
+    expect(first).toEqual(second)
+    expect(storage.getItem(APP_STORAGE_KEY)).toBe(serialized)
+    expect(first.version).toBe(2)
+    expect(first.activeProfileId).toBeNull()
+    expect(first.profilesByUserId["demo-citizen"]).toMatchObject({
+      id: "demo-citizen",
+      name: "Local Demo Name",
+      phone: "+966500000001",
+      district: "Al-Naeem",
+      avatar: "data:image/png;base64,avatar",
+    })
+    expect(first.reports[0]).toEqual({ ...canonicalReport, authorId: "demo-citizen" })
+    expect(first.votedReportIds).toEqual(["report-1"])
+    expect(first.votedSuggestionIds).toEqual(["suggestion-1"])
+  })
+
+  it("fills a partial v2 profile from the richer legacy user before applying defaults", () => {
+    const storage = new MemoryStorage()
+    storage.setItem(
+      APP_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        role: null,
+        profilesByUserId: { "citizen-42": { id: "citizen-42", name: "Local Name" } },
+        activeProfileId: null,
+        reports: [],
+        votedReportIds: [],
+        suggestions: [],
+        votedSuggestionIds: [],
+      }),
+    )
+    storage.setItem(
+      "app_user",
+      JSON.stringify({
+        id: "citizen-42",
+        name: "Legacy Name",
+        phone: "+966500000042",
+        district: "Al-Rawdah",
+        avatar: "/richer-avatar.jpg",
+        role: "Citizen",
+      }),
+    )
+
+    const profile = migrateLegacyAppStorage(storage).profilesByUserId["citizen-42"]
+    expect(profile).toEqual({
+      id: "citizen-42",
+      name: "Local Name",
+      phone: "+966500000042",
+      district: "Al-Rawdah",
+      avatar: "/richer-avatar.jpg",
+      role: "Citizen",
+    })
+  })
+
+  it("binds only an exact Citizen ID and never claims another profile or report", () => {
+    const storage = new MemoryStorage()
+    storage.setItem(
+      APP_STORAGE_KEY,
+      JSON.stringify({
+        ...EMPTY_APP_STORAGE,
+        profilesByUserId: {
+          "legacy-citizen": {
+            id: "legacy-citizen",
+            name: "Legacy Citizen",
+            phone: "+966500000010",
+            district: "Al-Balad",
+            avatar: "/legacy.jpg",
+            role: "Citizen",
+          },
+        },
+        reports: [{ ...canonicalReport, authorId: "legacy-citizen" }],
+      }),
+    )
+
+    const projected = applyMunicipalSessionProjection(
+      {
+        id: "new-citizen",
+        name: "Authenticated Citizen",
+        role: "Citizen",
+        phone: "+966500000020",
+        avatarUrl: "/server.jpg",
+        district: { id: "al-naeem", name: "Al-Naeem" },
+      },
+      storage,
+    )
+
+    expect(projected.activeProfileId).toBe("new-citizen")
+    expect(Object.keys(projected.profilesByUserId)).toEqual(["legacy-citizen", "new-citizen"])
+    expect(projected.profilesByUserId["legacy-citizen"].phone).toBe("+966500000010")
+    expect(projected.reports[0].authorId).toBe("legacy-citizen")
+    expect(getProfileForAuthenticatedUser(projected, "new-citizen")?.phone).toBe("+966500000020")
+    expect(getProfileForAuthenticatedUser(projected, "unknown")).toBeNull()
+    expect(getProfileForAuthenticatedUser(projected, "toString")).toBeNull()
+  })
+
+  it("preserves an exact-ID profile, server phone authority, and ownership after a local rename", () => {
+    const storage = new MemoryStorage()
+    storage.setItem(
+      APP_STORAGE_KEY,
+      JSON.stringify({
+        ...EMPTY_APP_STORAGE,
+        profilesByUserId: {
+          "demo-citizen": {
+            id: "demo-citizen",
+            name: "Existing Local Name",
+            phone: "+966500000030",
+            district: "Al-Naeem",
+            avatar: "/local-avatar.jpg",
+            role: "Citizen",
+          },
+        },
+        reports: [{ ...canonicalReport, authorId: "demo-citizen" }],
+      }),
+    )
+
+    const projected = applyMunicipalSessionProjection(
+      {
+        id: "demo-citizen",
+        name: "Server Name",
+        role: "Citizen",
+        phone: "+966500000031",
+        avatarUrl: "/server-avatar.jpg",
+        district: { id: "al-balad", name: "Al-Balad" },
+      },
+      storage,
+    )
+    expect(projected.profilesByUserId["demo-citizen"]).toMatchObject({
+      name: "Existing Local Name",
+      phone: "+966500000031",
+      district: "Al-Naeem",
+      avatar: "/local-avatar.jpg",
+    })
+
+    const renamed = updateProfileForAuthenticatedUser(
+      "demo-citizen",
+      { name: "Renamed Locally" },
+      storage,
+    )
+    expect(renamed.profilesByUserId["demo-citizen"].name).toBe("Renamed Locally")
+    expect(renamed.reports[0].authorId).toBe("demo-citizen")
+  })
+
+  it.each(["Manager", "Crew"] as const)("does not select a Citizen profile for a %s session", (role) => {
+    const storage = new MemoryStorage()
+    const citizen = {
+      id: "citizen-1",
+      name: "Citizen",
+      district: "Al-Naeem",
+      avatar: "/citizen.jpg",
+      role: "Citizen" as const,
+    }
+    storage.setItem(
+      APP_STORAGE_KEY,
+      JSON.stringify({
+        ...EMPTY_APP_STORAGE,
+        role: "Citizen",
+        profilesByUserId: { [citizen.id]: citizen },
+        activeProfileId: citizen.id,
+        reports: [canonicalReport],
+      }),
+    )
+
+    const projected = applyMunicipalSessionProjection(
+      {
+        id: `${role.toLowerCase()}-1`,
+        name: `${role} User`,
+        role,
+        phone: null,
+        avatarUrl: null,
+        district: null,
+      },
+      storage,
+    )
+
+    expect(projected.role).toBe(role)
+    expect(projected.activeProfileId).toBeNull()
+    expect(projected.profilesByUserId).toEqual({ [citizen.id]: citizen })
+    expect(projected.reports).toEqual([canonicalReport])
   })
 })

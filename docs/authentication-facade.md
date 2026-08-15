@@ -35,3 +35,18 @@ only the newly issued signed session cookie, verifies that the new session is
 gone, and returns only Better Auth's expiration cookies with a generic error. If
 that supported cleanup cannot confirm deletion, an exact-token database delete
 is attempted; no user-wide session deletion is used.
+
+## Phase 2B2B client transition
+
+The browser calls only the municipal facade with same-origin credentials. POST
+requests always use `application/json`; client code accepts only the sanitized
+user and role-specific destination returned by the facade. The session cookie
+and a freshly loaded database session are the authentication authority.
+
+The municipal browser envelope remains under `smartMunicipalAssistant`, now at
+version 2. Citizen profiles are keyed by the exact database user ID. A live
+Citizen session may select or create only its matching profile; staff and
+anonymous sessions clear that non-authoritative selection without deleting any
+profiles, reports, suggestions, votes, attachments, or ownership. The retained
+`role` field is a deprecated display compatibility projection and is never read
+for authorization.
