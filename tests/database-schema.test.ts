@@ -29,6 +29,10 @@ describe("Phase 2A database schema", () => {
       "StatusHistory",
       "WorkOrderStatusHistory",
       "AuditLog",
+      "AuthSession",
+      "AuthAccount",
+      "AuthVerification",
+      "AuthRateLimit",
     ]) {
       expect(schema).toContain(`model ${model} {`)
     }
@@ -113,6 +117,49 @@ describe("Phase 2A database schema", () => {
     expect(environmentExample).not.toContain("neon.tech")
     expect(gitignore).toContain("!.env.example")
     expect(gitignore).toContain("generated/prisma/")
+  })
+
+  it("adds the Better Auth foundation through a safe forward migration", () => {
+    const schema = readProjectFile("prisma", "schema.prisma")
+    const migration = readProjectFile(
+      "prisma",
+      "migrations",
+      "20260812230000_phase_2b_authentication",
+      "migration.sql",
+    )
+
+    expect(schema).toContain("authEmail           String   @unique")
+    expect(schema).toContain("authUsername        String?  @unique")
+    expect(schema).toContain("isActive            Boolean  @default(true)")
+    expect(migration.indexOf('ADD COLUMN "authEmail" TEXT')).toBeLessThan(
+      migration.indexOf('UPDATE "users"'),
+    )
+    expect(migration.indexOf('UPDATE "users"')).toBeLessThan(
+      migration.indexOf('ALTER COLUMN "authEmail" SET NOT NULL'),
+    )
+    expect(migration).toContain('CREATE TABLE "auth_sessions"')
+    expect(migration).toContain('CREATE TABLE "auth_accounts"')
+    expect(migration).toContain('CREATE TABLE "auth_verifications"')
+    expect(migration).not.toMatch(/DROP\s+(TABLE|SCHEMA|COLUMN)/i)
+  })
+
+  it("adds persistent Better Auth rate limiting through a separate forward migration", () => {
+    const schema = readProjectFile("prisma", "schema.prisma")
+    const migration = readProjectFile(
+      "prisma",
+      "migrations",
+      "20260812233000_phase_2b_auth_rate_limit_security",
+      "migration.sql",
+    )
+
+    expect(schema).toMatch(/model AuthRateLimit \{[\s\S]*key\s+String\s+@unique/)
+    expect(schema).toMatch(/model AuthRateLimit \{[\s\S]*count\s+Int/)
+    expect(schema).toMatch(/model AuthRateLimit \{[\s\S]*lastRequest\s+BigInt/)
+    expect(schema).toContain('@@map("auth_rate_limits")')
+    expect(migration).toContain('CREATE TABLE "auth_rate_limits"')
+    expect(migration).toContain('CREATE UNIQUE INDEX "auth_rate_limits_key_key"')
+    expect(migration).toContain('CONSTRAINT "auth_rate_limits_count_nonnegative_check"')
+    expect(migration).not.toMatch(/DROP\s+(TABLE|SCHEMA|COLUMN)|TRUNCATE|DELETE\s+FROM/i)
   })
 })
 

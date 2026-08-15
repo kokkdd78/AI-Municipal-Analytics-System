@@ -5,6 +5,7 @@ import { resolve } from "node:path"
 import { PrismaNeon } from "@prisma/adapter-neon"
 
 import { JEDDAH_DISTRICTS } from "../constants/districts"
+import { deriveExistingUserAuthEmail } from "../lib/auth/identifiers"
 import {
   PrismaClient,
   ReportSeverity,
@@ -89,6 +90,7 @@ async function seedUsers(database: PrismaClient): Promise<void> {
       {
         id: "demo-citizen",
         name: "Ayman AlJenidi",
+        authEmail: deriveExistingUserAuthEmail("demo-citizen"),
         role: UserRole.Citizen,
         avatarUrl: "https://api.dicebear.com/9.x/avataaars/svg?seed=Ayman",
         districtId: "al-naeem",
@@ -98,6 +100,7 @@ async function seedUsers(database: PrismaClient): Promise<void> {
       {
         id: "demo-manager",
         name: "Fatimah",
+        authEmail: deriveExistingUserAuthEmail("demo-manager"),
         role: UserRole.Manager,
         districtId: "al-naeem",
         departmentId: "department-roads",
@@ -108,6 +111,7 @@ async function seedUsers(database: PrismaClient): Promise<void> {
       {
         id: "demo-crew",
         name: "Khalid",
+        authEmail: deriveExistingUserAuthEmail("demo-crew"),
         role: UserRole.Crew,
         districtId: "al-naeem",
         departmentId: "department-roads",

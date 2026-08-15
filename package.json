@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "next build",
+    "auth:db:preflight": "node scripts/auth-db-preflight.ts",
+    "auth:test:provision-demo": "node scripts/provision-test-auth-users.ts",
     "db:format": "prisma format",
     "db:generate": "prisma generate",
     "db:migrate:deploy": "prisma migrate deploy",
@@ -18,11 +20,14 @@
     "lint": "eslint .",
     "postinstall": "prisma generate",
     "start": "next start",
-    "test": "vitest run",
-    "test:db": "vitest run tests/database.integration.test.ts"
+    "test": "vitest run --maxWorkers=1",
+    "test:auth": "vitest run tests/auth-identifiers.test.ts tests/auth-authorization.test.ts tests/auth-config.test.ts",
+    "test:auth:integration": "vitest run tests/auth.integration.test.ts",
+    "test:db": "vitest run --maxWorkers=1 tests/database.integration.test.ts tests/auth.integration.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
+    "@better-auth/prisma-adapter": "1.6.23",
     "@googlemaps/js-api-loader": "2.0.2",
     "@hookform/resolvers": "^3.10.0",
     "@neondatabase/serverless": "1.1.0",
@@ -59,6 +64,7 @@
     "@vercel/analytics": "latest",
     "ai": "latest",
     "autoprefixer": "^10.4.20",
+    "better-auth": "1.6.23",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "latest",
@@ -68,6 +74,7 @@
     "input-otp": "latest",
     "leaflet": "latest",
     "leaflet.heat": "latest",
+    "libphonenumber-js": "1.13.10",
     "lucide-react": "^0.454.0",
     "next": "16.0.3",
     "next-themes": "latest",

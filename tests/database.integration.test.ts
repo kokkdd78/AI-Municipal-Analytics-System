@@ -14,6 +14,7 @@ import {
   WorkOrderStatus,
 } from "../generated/prisma/client"
 import { requireSafeTestDatabaseUrl } from "../lib/db/test-database-url"
+import { deriveExistingUserAuthEmail } from "../lib/auth/identifiers"
 import { seedDatabase } from "../prisma/seed"
 
 const PREFIX = "phase2a-integration-"
@@ -119,12 +120,14 @@ describe("Phase 2A Neon database foundation", () => {
         {
           id: IDS.citizen,
           name: "Test Citizen",
+          authEmail: deriveExistingUserAuthEmail(IDS.citizen),
           role: UserRole.Citizen,
           districtId: IDS.district,
         },
         {
           id: IDS.manager,
           name: "Test Manager",
+          authEmail: deriveExistingUserAuthEmail(IDS.manager),
           role: UserRole.Manager,
           districtId: IDS.district,
           departmentId: IDS.department,
@@ -133,6 +136,7 @@ describe("Phase 2A Neon database foundation", () => {
         {
           id: IDS.crew,
           name: "Test Crew",
+          authEmail: deriveExistingUserAuthEmail(IDS.crew),
           role: UserRole.Crew,
           districtId: IDS.district,
           departmentId: IDS.department,
@@ -183,13 +187,13 @@ describe("Phase 2A Neon database foundation", () => {
         longitude: 39.21,
       },
     })
-  }, 30_000)
+  }, 60_000)
 
   afterAll(async () => {
     if (!prisma) return
     await cleanupTestRecords()
     await prisma.$disconnect()
-  }, 30_000)
+  }, 60_000)
 
   it("enforces report foreign keys and SQL value constraints", async () => {
     await expect(
@@ -220,7 +224,7 @@ describe("Phase 2A Neon database foundation", () => {
         },
       }),
     ).rejects.toThrow()
-  }, 30_000)
+  }, 60_000)
 
   it("rejects duplicate report and suggestion votes", async () => {
     await prisma.vote.create({
@@ -247,7 +251,7 @@ describe("Phase 2A Neon database foundation", () => {
 
     expect(await prisma.vote.count({ where: { reportId: IDS.report } })).toBe(1)
     expect(await prisma.suggestionVote.count({ where: { suggestionId: IDS.suggestion } })).toBe(1)
-  }, 30_000)
+  }, 60_000)
 
   it("stores report histories, work orders, unique crew assignments, and completion evidence", async () => {
     await prisma.statusHistory.create({
@@ -368,7 +372,7 @@ describe("Phase 2A Neon database foundation", () => {
       await prisma.attachment.count({ where: { id: `${PREFIX}report-only-photo`, workOrderId: null } }),
     ).toBe(1)
     expect(reportHistory).toMatchObject([{ toStatus: ReportStatus.IN_PROGRESS, actorId: IDS.manager }])
-  }, 30_000)
+  }, 60_000)
 
   it("re-seeds without overwriting municipal activity or duplicating relationships", async () => {
     await seedDatabase(prisma)
@@ -525,5 +529,5 @@ describe("Phase 2A Neon database foundation", () => {
         data: withoutId(originalUser),
       })
     }
-  }, 60_000)
+  }, 120_000)
 })

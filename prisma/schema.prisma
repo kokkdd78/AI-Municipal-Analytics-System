@@ -51,17 +51,22 @@ enum WorkOrderPriority {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  phone        String?  @unique
-  employeeId   String?  @unique
-  passwordHash String?
-  role         UserRole
-  avatarUrl    String?
-  districtId   String?
-  departmentId String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  name                String
+  authEmail           String   @unique
+  emailVerified       Boolean  @default(false)
+  authUsername        String?  @unique
+  authDisplayUsername String?
+  phone               String?  @unique
+  employeeId          String?  @unique
+  passwordHash        String?
+  role                UserRole
+  isActive            Boolean  @default(true)
+  avatarUrl           String?
+  districtId          String?
+  departmentId        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   district                District?                @relation(fields: [districtId], references: [id], onDelete: SetNull)
   department              Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
@@ -76,11 +81,76 @@ model User {
   reportStatusChanges     StatusHistory[]
   workOrderStatusChanges  WorkOrderStatusHistory[]
   auditLogs               AuditLog[]
+  authSessions            AuthSession[]
+  authAccounts            AuthAccount[]
 
   @@index([role])
   @@index([districtId])
   @@index([departmentId])
+  @@index([isActive])
   @@map("users")
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model AuthAccount {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("auth_accounts")
+}
+
+model AuthVerification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@index([expiresAt])
+  @@map("auth_verifications")
+}
+
+model AuthRateLimit {
+  id          String @id @default(cuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@index([lastRequest])
+  @@map("auth_rate_limits")
 }
 
 model Department {
