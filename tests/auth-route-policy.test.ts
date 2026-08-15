@@ -117,12 +117,24 @@ describe("municipal authentication request boundary", () => {
         trusted,
       ),
     ).toBe(true)
+    expect(
+      hasTrustedRequestOrigin(
+        new Request("https://municipal.example.test/api/auth/municipal", {
+          headers: { origin: "HTTPS://MUNICIPAL.EXAMPLE.TEST:443" },
+        }),
+        trusted,
+      ),
+    ).toBe(true)
 
     for (const origin of [
       "https://evil.example.test",
       "https://municipal.example.test.evil.test",
       "https://municipal.example.test/",
       "https://user@municipal.example.test",
+      "https://municipal.example.test:444",
+      "http://municipal.example.test",
+      "https://municipal.example.test, https://evil.example.test",
+      "null",
       "not-an-origin",
       "",
     ]) {

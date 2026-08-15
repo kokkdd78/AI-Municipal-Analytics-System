@@ -87,12 +87,37 @@ function invalidOrigin(): Response {
 
 export function hasTrustedRequestOrigin(request: Request, trustedOrigins: readonly string[]): boolean {
   const suppliedOrigin = request.headers.get("origin")
-  if (!suppliedOrigin || suppliedOrigin.length > 512) return false
+  if (
+    !suppliedOrigin ||
+    suppliedOrigin.length > 512 ||
+    suppliedOrigin.includes(",") ||
+    !/^[a-z][a-z\d+.-]*:\/\/[^/?#]+$/i.test(suppliedOrigin)
+  ) {
+    return false
+  }
 
   try {
     const parsed = new URL(suppliedOrigin)
-    if (parsed.origin !== suppliedOrigin || parsed.username || parsed.password) return false
-    return trustedOrigins.includes(parsed.origin)
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.origin === "null"
+    ) {
+      return false
+    }
+
+    return trustedOrigins.some((trustedOrigin) => {
+      try {
+        const trusted = new URL(trustedOrigin)
+        return trusted.origin === parsed.origin
+      } catch {
+        return false
+      }
+    })
   } catch {
     return false
   }

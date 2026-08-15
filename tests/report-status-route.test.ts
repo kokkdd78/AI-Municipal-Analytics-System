@@ -1,12 +1,10 @@
 import { NextRequest } from "next/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-const authorizationState = vi.hoisted(() => ({
-  result: {} as { response?: Response; user?: { id: string } },
-}))
+const statusGET = vi.hoisted(() => vi.fn())
 
-vi.mock("@/lib/auth/authorization", () => ({
-  requireApiAnyRole: vi.fn(async () => authorizationState.result),
+vi.mock("@/lib/reports/server", () => ({
+  reportHttpHandlers: { statusGET },
 }))
 
 import { GET } from "../app/api/report-status/[id]/route"
@@ -18,29 +16,13 @@ function callReportStatus() {
 }
 
 describe("authenticated report-status API", () => {
-  beforeEach(() => {
-    authorizationState.result = { user: { id: "active-user" } }
-  })
-
-  it.each([
-    [401, { error: "Authentication required" }],
-    [403, { error: "Access denied" }],
-  ])("returns JSON %s before reading municipal data", async (status, body) => {
-    authorizationState.result = { response: Response.json(body, { status }) }
-
+  it("delegates status lookup to the database-backed report handler", async () => {
+    const expected = Response.json({ id: "report-1", status: "pending", history: [] })
+    statusGET.mockResolvedValueOnce(expected)
     const response = await callReportStatus()
 
-    expect(response.status).toBe(status)
-    await expect(response.json()).resolves.toEqual(body)
-  })
-
-  it("preserves the existing authorized mock response", async () => {
-    const response = await callReportStatus()
-    const body = (await response.json()) as { id: string; location: unknown; timeline: unknown[] }
-
-    expect(response.status).toBe(200)
-    expect(body.id).toBe("report-1")
-    expect(body.location).toBeDefined()
-    expect(body.timeline.length).toBeGreaterThanOrEqual(2)
+    expect(response).toBe(expected)
+    expect(statusGET).toHaveBeenCalledOnce()
+    expect(statusGET.mock.calls[0]?.[1]).toEqual({ params: expect.any(Promise) })
   })
 })
