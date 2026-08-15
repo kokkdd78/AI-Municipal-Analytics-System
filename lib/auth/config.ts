@@ -131,6 +131,23 @@ export function createMunicipalAuth(options: MunicipalAuthOptions) {
         create: {
           before: async (user, context) => {
             if (context?.path !== "/sign-up/email") return
+
+            const existingIdentity = await database.user.findFirst({
+              where: {
+                OR: [
+                  ...(typeof user.phone === "string" ? [{ phone: user.phone }] : []),
+                  ...(typeof user.authUsername === "string" ? [{ authUsername: user.authUsername }] : []),
+                  { authEmail: user.email },
+                ],
+              },
+              select: { id: true },
+            })
+            if (existingIdentity) {
+              throw new APIError("BAD_REQUEST", {
+                message: "Registration is unavailable",
+                code: "REGISTRATION_UNAVAILABLE",
+              })
+            }
             return { data: { ...user, role: "Citizen", isActive: true } }
           },
         },
@@ -196,6 +213,7 @@ export function createMunicipalAuth(options: MunicipalAuthOptions) {
             where: { authUsername: submittedUsername },
             select: {
               isActive: true,
+              role: true,
               authAccounts: {
                 where: { providerId: "credential" },
                 select: { password: true },
@@ -204,7 +222,15 @@ export function createMunicipalAuth(options: MunicipalAuthOptions) {
             },
           })
           const credentialHash = user?.authAccounts[0]?.password
-          if (!user?.isActive || typeof credentialHash !== "string" || !BETTER_AUTH_PASSWORD_HASH.test(credentialHash)) {
+          const namespaceRoleMatches = isCitizenAuthUsername(submittedUsername)
+            ? user?.role === "Citizen"
+            : user?.role === "Manager" || user?.role === "Crew"
+          if (
+            !user?.isActive ||
+            !namespaceRoleMatches ||
+            typeof credentialHash !== "string" ||
+            !BETTER_AUTH_PASSWORD_HASH.test(credentialHash)
+          ) {
             await constantWorkCredentialError(body.password, passwordVerifier)
           }
           body.username = submittedUsername

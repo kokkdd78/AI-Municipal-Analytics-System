@@ -1,35 +1,11 @@
-"use client"
+import { redirect } from "next/navigation"
 
-import { useAuth } from "@/context/auth-context"
-import CitizenApp from "@/components/citizen-app"
-import ManagerDashboard from "@/components/manager-dashboard"
-import CrewTaskList from "@/components/crew-task-list"
 import OnboardingWalkthrough from "@/components/onboarding-walkthrough"
-import { useRouter } from "next/navigation"
+import { getCurrentUser } from "@/lib/auth/authorization"
+import { roleHome } from "@/lib/auth/route-policy"
 
-export default function HomePage() {
-  const { userRole, isLoading } = useAuth()
-  const router = useRouter()
-
-  const handleGetStarted = () => {
-    router.push("/auth?mode=signup")
-  }
-
-  if (isLoading) {
-    return null
-  }
-
-  if (userRole === "Citizen") {
-    return <CitizenApp />
-  }
-
-  if (userRole === "Manager") {
-    return <ManagerDashboard />
-  }
-
-  if (userRole === "Crew") {
-    return <CrewTaskList />
-  }
-
-  return <OnboardingWalkthrough onGetStarted={handleGetStarted} />
+export default async function HomePage() {
+  const user = await getCurrentUser()
+  if (user) redirect(roleHome(user.role))
+  return <OnboardingWalkthrough />
 }

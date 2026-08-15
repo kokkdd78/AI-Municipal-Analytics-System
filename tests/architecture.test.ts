@@ -85,4 +85,43 @@ describe("Phase 1 architecture guardrails", () => {
       expect(existsSync(join(projectRoot, screen))).toBe(true)
     }
   })
+
+  it("keeps Phase 2B2A server-only without starting the UI or storage transition", () => {
+    const storageSource = readFileSync(join(projectRoot, "lib", "client-storage.ts"), "utf8")
+    const authContextSource = readFileSync(join(projectRoot, "context", "auth-context.tsx"), "utf8")
+    const citizenLoginSource = readFileSync(join(projectRoot, "components", "login-screen.tsx"), "utf8")
+    const employeeLoginSource = readFileSync(
+      join(projectRoot, "components", "employee-login-screen.tsx"),
+      "utf8",
+    )
+
+    expect(storageSource).toContain("version: 1")
+    expect(storageSource).not.toContain("profilesByUserId")
+    expect(authContextSource).toContain("setUserRole")
+    expect(citizenLoginSource).toContain("InputOTP")
+    expect(employeeLoginSource).toContain("employeeRole")
+
+    const protectedWrappers = [
+      "app/citizen-app/page.tsx",
+      "app/map/page.tsx",
+      "app/my-reports/page.tsx",
+      "app/report/page.tsx",
+      "app/report-success/page.tsx",
+      "app/report/track/[id]/page.tsx",
+      "app/manager/page.tsx",
+      "app/crew/page.tsx",
+    ]
+    for (const page of protectedWrappers) {
+      expect(readFileSync(join(projectRoot, page), "utf8")).toContain("requirePageRole")
+    }
+
+    const municipalClientFiles = [
+      ...collectSourceFiles(join(projectRoot, "components")),
+      ...collectSourceFiles(join(projectRoot, "context")),
+      join(projectRoot, "lib", "client-storage.ts"),
+    ]
+    for (const file of municipalClientFiles) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/(?:@\/lib\/db\/prisma|@prisma\/client)/)
+    }
+  })
 })

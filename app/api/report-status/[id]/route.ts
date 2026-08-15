@@ -1,5 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+import { requireApiAnyRole } from "@/lib/auth/authorization"
+
+const MUNICIPAL_ROLES = ["Citizen", "Manager", "Crew"] as const
+
 interface ReportStatus {
   id: string
   type: string
@@ -12,6 +16,9 @@ interface ReportStatus {
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authorization = await requireApiAnyRole(MUNICIPAL_ROLES, request.headers)
+  if (authorization.response) return authorization.response
+
   try {
     const { id } = await params
 

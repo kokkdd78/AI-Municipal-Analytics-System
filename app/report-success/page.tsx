@@ -1,4 +1,5 @@
 import ReportSuccess from "@/components/report-success"
+import { requirePageRole } from "@/lib/auth/page-authorization"
 
 export const metadata = {
   title: "Report Submitted",
@@ -10,6 +11,7 @@ export default async function ReportSuccessPage({
 }: {
   searchParams: Promise<{ reportId?: string }>
 }) {
+  await requirePageRole("Citizen")
   const { reportId } = await searchParams
   return <ReportSuccess reportId={reportId} />
 }
