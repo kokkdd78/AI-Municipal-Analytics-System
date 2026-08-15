@@ -5,11 +5,13 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Trees, Lightbulb, Zap, MapPin, X, HelpCircle } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { useData } from "@/context/data-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { JEDDAH_DISTRICTS, type District, findDistrictByName } from "@/constants/districts"
+import { SuggestionClientError, suggestionClientErrorMessage } from "@/lib/suggestions/client"
+import { useToast } from "@/hooks/use-toast"
 
 const MapComponent = dynamic(() => import("./map-component"), {
   ssr: false,
@@ -45,12 +47,16 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
 }
 
 export default function NewSuggestionProposal({ open, onOpenChange, district }: NewSuggestionProposalProps) {
-  const { addSuggestion } = useData()
+  const { toast } = useToast()
+  const { addSuggestion, isCreatingSuggestion } = useData()
   const [selectedCategory, setSelectedCategory] = useState("park")
   const [customCategory, setCustomCategory] = useState("")
   const [description, setDescription] = useState("")
   const [selectedAddress, setSelectedAddress] = useState(district || "")
   const [showMap, setShowMap] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const operationRef = useRef<AbortController | null>(null)
+  const mountedRef = useRef(true)
   const [selectedDistrict, setSelectedDistrict] = useState<District>(
     findDistrictByName(district) || JEDDAH_DISTRICTS[0],
   )
@@ -59,6 +65,15 @@ export default function NewSuggestionProposal({ open, onOpenChange, district }: 
     lat: 21.5433,
     lng: 39.1728,
   })
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      operationRef.current?.abort()
+      operationRef.current = null
+    }
+  }, [])
 
   const handleMapDrag = () => {
     setShowMap(true)
@@ -73,39 +88,55 @@ export default function NewSuggestionProposal({ open, onOpenChange, district }: 
     setShowMap(false)
   }
 
-  const handleSubmit = () => {
-    if (!description.trim()) return
+  const handleSubmit = async () => {
+    if (!description.trim() || operationRef.current) return
 
-    const category = selectedCategory === "other" ? customCategory : selectedCategory
+    const category = (selectedCategory === "other" ? customCategory : selectedCategory).trim()
+    const title = selectedCategory === "other"
+      ? customCategory.trim()
+      : CATEGORIES.find((c) => c.id === selectedCategory)?.label ?? "Suggestion"
+    if (!category || !title || !mapCenter) return
 
-    addSuggestion({
-      id: `suggestion-${Date.now()}`,
-      title:
-        selectedCategory === "other"
-          ? customCategory
-          : CATEGORIES.find((c) => c.id === selectedCategory)?.label || "Suggestion",
-      category: category,
-      location: {
-        lat: mapCenter?.lat || 21.5433,
-        lng: mapCenter?.lng || 39.1728,
-      },
-      description,
-      district: selectedDistrict,
-      createdAt: new Date().toISOString(),
-      votes: 0,
-    })
-
-    setDescription("")
-    setSelectedCategory("park")
-    setCustomCategory("")
-    setSelectedAddress(district)
-    setSelectedDistrict(findDistrictByName(district) || JEDDAH_DISTRICTS[0])
-    onOpenChange(false)
+    const controller = new AbortController()
+    operationRef.current = controller
+    setSubmitting(true)
+    try {
+      await addSuggestion({
+        title,
+        category,
+        location: mapCenter,
+        description: description.trim(),
+        districtId: selectedDistrict.id,
+      }, { signal: controller.signal })
+      if (!mountedRef.current || controller.signal.aborted) return
+      setDescription("")
+      setSelectedCategory("park")
+      setCustomCategory("")
+      setSelectedAddress(district)
+      setSelectedDistrict(findDistrictByName(district) || JEDDAH_DISTRICTS[0])
+      onOpenChange(false)
+    } catch (error) {
+      if (
+        mountedRef.current
+        && !(error instanceof SuggestionClientError && error.kind === "aborted")
+      ) {
+        toast({
+          title: "Suggestion Not Submitted",
+          description: suggestionClientErrorMessage(error),
+          variant: "destructive",
+        })
+      }
+    } finally {
+      if (operationRef.current === controller) {
+        operationRef.current = null
+        if (mountedRef.current) setSubmitting(false)
+      }
+    }
   }
 
   if (showMap) {
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={(next) => { if (!submitting) onOpenChange(next) }}>
         <DialogContent className="max-w-md p-0 overflow-hidden h-[80vh] flex flex-col">
           <div className="relative flex-1">
             <MapComponent
@@ -117,6 +148,7 @@ export default function NewSuggestionProposal({ open, onOpenChange, district }: 
               size="icon"
               className="absolute top-4 right-4 z-[1000] rounded-full shadow-lg"
               onClick={() => setShowMap(false)}
+              disabled={submitting}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -135,7 +167,7 @@ export default function NewSuggestionProposal({ open, onOpenChange, district }: 
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={(next) => { if (!submitting) onOpenChange(next) }}>
       <DialogContent className="max-w-md p-0 overflow-hidden">
         <div className="h-40 bg-gradient-to-b from-blue-100 to-blue-50 relative flex items-center justify-center border-b border-border">
           <div className="text-center space-y-2">
@@ -225,15 +257,15 @@ export default function NewSuggestionProposal({ open, onOpenChange, district }: 
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1" disabled={submitting}>
               Cancel
             </Button>
             <Button
-              onClick={handleSubmit}
-              disabled={!description.trim() || (selectedCategory === "other" && !customCategory.trim())}
+              onClick={() => void handleSubmit()}
+              disabled={submitting || isCreatingSuggestion || !description.trim() || (selectedCategory === "other" && !customCategory.trim())}
               className="flex-1 bg-primary hover:bg-primary/90"
             >
-              Submit Proposal
+              {submitting || isCreatingSuggestion ? "Submitting..." : "Submit Proposal"}
             </Button>
           </div>
         </div>

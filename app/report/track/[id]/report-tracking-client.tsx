@@ -14,6 +14,7 @@ import { getReportStatus, ReportClientError, reportClientErrorMessage } from "@/
 import { legacyReportTrackingView } from "@/lib/reports/client-state"
 import type { ReportStatusDto } from "@/lib/reports/dto"
 import { useAuth } from "@/context/auth-context"
+import Image from "next/image"
 
 const MapComponent = dynamic(() => import("@/components/map-component"), {
   ssr: false,
@@ -176,6 +177,16 @@ function ReportTrackingContent() {
         )}
 
         <Card className="p-6 mb-6 space-y-4">
+          {report.attachments[0] && (
+            <Image
+              src={report.attachments[0].url}
+              alt={report.attachments[0].name}
+              width={800}
+              height={480}
+              unoptimized
+              className="h-56 w-full rounded-xl object-cover"
+            />
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">Report ID</p>
@@ -318,7 +329,7 @@ function ReportTrackingContent() {
                     title: report.type,
                     description: report.district,
                     votes: 0,
-                    attachments: [],
+                    attachments: report.attachments,
                   },
                 ]}
               />

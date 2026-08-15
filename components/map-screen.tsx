@@ -26,6 +26,10 @@ export default function MapScreen({ onNavigate }: { onNavigate: (tab: string) =>
     suggestions,
     upvoteSuggestion,
     votedSuggestions,
+    votingSuggestionIds,
+    suggestionLoadState,
+    suggestionMutationError,
+    refreshSuggestions,
   } = useData()
   const { location } = useUserLocation()
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
@@ -34,7 +38,7 @@ export default function MapScreen({ onNavigate }: { onNavigate: (tab: string) =>
     if (type === "report") {
       void upvoteReport(id)
     } else {
-      upvoteSuggestion(id)
+      void upvoteSuggestion(id)
     }
   }
 
@@ -49,17 +53,23 @@ export default function MapScreen({ onNavigate }: { onNavigate: (tab: string) =>
         votedReports={votedReports}
         pendingReports={votingReportIds}
         votedSuggestions={votedSuggestions}
+        pendingSuggestions={votingSuggestionIds}
       />
 
-      {(reportLoadState.isLoading || reportLoadState.error || reportMutationError) && (
+      {(reportLoadState.isLoading || reportLoadState.error || reportMutationError || suggestionLoadState.error || suggestionMutationError) && (
         <div className="absolute top-20 left-4 right-4 z-[1000] rounded-lg border bg-background/95 p-3 shadow-lg">
           {reportLoadState.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading community reports…</p>
           ) : (
             <>
-              <p className="text-sm text-destructive">{reportLoadState.error ?? reportMutationError}</p>
+              <p className="text-sm text-destructive">
+                {reportLoadState.error ?? reportMutationError ?? suggestionLoadState.error ?? suggestionMutationError}
+              </p>
               {reportLoadState.error && (
                 <Button size="sm" variant="outline" className="mt-2" onClick={() => void refreshReports()}>Retry</Button>
+              )}
+              {!reportLoadState.error && suggestionLoadState.error && (
+                <Button size="sm" variant="outline" className="mt-2" onClick={() => void refreshSuggestions()}>Retry</Button>
               )}
             </>
           )}

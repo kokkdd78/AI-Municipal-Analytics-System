@@ -13,11 +13,12 @@ import Image from "next/image"
 import { useAuth } from "@/context/auth-context"
 import { findDistrictByName } from "@/constants/districts"
 import { ReportClientError, reportClientErrorMessage } from "@/lib/reports/client"
-import { manualReportAttachmentError } from "@/lib/reports/client-state"
+import { MAX_REPORT_IMAGE_BYTES, REPORT_IMAGE_MIME_TYPES } from "@/lib/report-images/contracts"
 import {
   createReportFormOperationGate,
   reportDescriptionForSubmission,
   reportSuccessPath,
+  submitReportWithOptionalImage,
 } from "@/lib/reports/form-operation"
 import { useRouter } from "next/navigation"
 
@@ -45,7 +46,7 @@ export default function ReportFormModal({ onClose }: ReportFormModalProps) {
   const { toast } = useToast()
   const router = useRouter()
   const { user: authenticatedUser } = useAuth()
-  const { user, createReport, isCreatingReport } = useData()
+  const { user, createReport, uploadReportImage, isCreatingReport } = useData()
   const [loading, setLoading] = useState(false)
   const operationGateRef = useRef(createReportFormOperationGate())
 
@@ -59,11 +60,32 @@ export default function ReportFormModal({ onClose }: ReportFormModalProps) {
   )
   const [selectedDistrictId, setSelectedDistrictId] = useState(authenticatedUser?.district?.id ?? "")
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null)
+  const [createdReportId, setCreatedReportId] = useState<string | null>(null)
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null)
 
   const [showMap, setShowMap] = useState(false)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
 
   useEffect(() => () => operationGateRef.current.dispose(), [])
+  useEffect(() => () => {
+    if (uploadedPhoto?.startsWith("blob:")) URL.revokeObjectURL(uploadedPhoto)
+  }, [uploadedPhoto])
+
+  const selectPhoto = (file: File) => {
+    if (!REPORT_IMAGE_MIME_TYPES.includes(file.type.toLowerCase() as (typeof REPORT_IMAGE_MIME_TYPES)[number])) {
+      toast({ title: "Unsupported Image", description: "Choose a JPEG, PNG, or WebP image.", variant: "destructive" })
+      return
+    }
+    if (file.size <= 0 || file.size > MAX_REPORT_IMAGE_BYTES) {
+      toast({ title: "Image Too Large", description: "Choose an image up to 5 MB.", variant: "destructive" })
+      return
+    }
+    if (uploadedPhoto?.startsWith("blob:")) URL.revokeObjectURL(uploadedPhoto)
+    setSelectedPhotoFile(file)
+    setUploadedPhoto(URL.createObjectURL(file))
+    setImageUploadError(null)
+  }
 
   const handleSubmit = async () => {
     const errors: FormErrors = {}
@@ -82,12 +104,6 @@ export default function ReportFormModal({ onClose }: ReportFormModalProps) {
 
     if (selectedLat === null || selectedLng === null || !selectedDistrictId) {
       errors.location = "Please select a location on the map"
-    }
-
-    const attachmentError = manualReportAttachmentError(uploadedPhoto)
-    if (attachmentError) {
-      toast({ title: "تعذر إرسال المرفق", description: attachmentError, variant: "destructive" })
-      return
     }
 
     if (Object.keys(errors).length > 0) {
@@ -125,14 +141,33 @@ export default function ReportFormModal({ onClose }: ReportFormModalProps) {
     if (!operation) return
     setLoading(true)
     try {
-      const created = await createReport({
-        category: selectedIssueType,
-        description: submissionDescription,
-        districtId: selectedDistrictId,
-        location: { lat: selectedLat!, lng: selectedLng! },
-      }, { signal: operation.signal })
+      const reportRequest = {
+          category: selectedIssueType,
+          description: submissionDescription,
+          districtId: selectedDistrictId,
+          location: { lat: selectedLat!, lng: selectedLng! },
+        }
+      const result = await submitReportWithOptionalImage({
+        existingReportId: createdReportId,
+        report: reportRequest,
+        image: selectedPhotoFile,
+        signal: operation.signal,
+        createReport: (report, signal) => createReport(report, { signal }),
+        uploadImage: (reportId, image, signal) => uploadReportImage(reportId, image, { signal }),
+      })
+      const reportId = result.reportId
+      setCreatedReportId(reportId)
+      if (result.image === "failed") {
+        if (operationGateRef.current.isCurrent(operation)) {
+          const message = "Your report was saved, but its image could not be uploaded. Retry the image without creating another report."
+          setImageUploadError(message)
+          toast({ title: "Report Saved — Image Failed", description: message, variant: "destructive" })
+        }
+        return
+      }
+      setImageUploadError(null)
       if (operationGateRef.current.commitNavigation(operation)) {
-        router.push(reportSuccessPath(created.id))
+        router.push(reportSuccessPath(reportId))
       }
     } catch (error) {
       if (operationGateRef.current.isCurrent(operation) && !(error instanceof ReportClientError && error.kind === "aborted")) {
@@ -299,9 +334,9 @@ export default function ReportFormModal({ onClose }: ReportFormModalProps) {
                   <input
                     id="imageUpload"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     className="hidden"
-                    onChange={(e) => e.target.files?.[0] && setUploadedPhoto(URL.createObjectURL(e.target.files[0]))}
+                    onChange={(e) => e.target.files?.[0] && selectPhoto(e.target.files[0])}
                   />
                 </label>
                 {uploadedPhoto && (
@@ -309,7 +344,10 @@ export default function ReportFormModal({ onClose }: ReportFormModalProps) {
                     type="button"
                     onClick={(e) => {
                       e.preventDefault()
+                      if (uploadedPhoto.startsWith("blob:")) URL.revokeObjectURL(uploadedPhoto)
                       setUploadedPhoto(null)
+                      setSelectedPhotoFile(null)
+                      setImageUploadError(null)
                     }}
                     className="absolute top-2 right-2 bg-white rounded-full p-2 shadow-md hover:shadow-lg transition-shadow"
                     aria-label="Remove image"
@@ -340,12 +378,29 @@ export default function ReportFormModal({ onClose }: ReportFormModalProps) {
             </div>
 
             {/* SUBMIT */}
+            {imageUploadError && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="alert">
+                <p>{imageUploadError}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  disabled={loading}
+                  onClick={() => createdReportId && router.push(reportSuccessPath(createdReportId))}
+                >
+                  Continue without image
+                </Button>
+              </div>
+            )}
             <Button
               onClick={handleSubmit}
               className="w-full bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white rounded-xl h-12 text-base font-semibold shadow-sm"
               disabled={loading || isCreatingReport}
             >
-              {loading ? "Submitting..." : "Submit Report"}
+              {loading
+                ? createdReportId ? "Uploading Image..." : "Submitting..."
+                : createdReportId ? "Retry Image Upload" : "Submit Report"}
             </Button>
           </div>
         </DialogContent>

@@ -1,10 +1,20 @@
 import type {
+  AttachmentKind,
   PrismaClient,
   ReportSeverity,
   ReportStatus,
   WorkOrderPriority,
   WorkOrderStatus,
 } from "../../generated/prisma/client"
+
+export interface ReportAttachmentRecord {
+  id: string
+  name: string
+  mimeType: string
+  url: string
+  kind: AttachmentKind
+  createdAt: Date
+}
 
 export interface ReportProjectionRecord {
   id: string
@@ -20,6 +30,7 @@ export interface ReportProjectionRecord {
   createdAt: Date
   updatedAt: Date
   district: { id: string; name: string }
+  attachments: ReportAttachmentRecord[]
   voteCount: number
   viewerHasVoted: boolean
 }
@@ -96,6 +107,18 @@ const reportProjectionSelect = {
   createdAt: true,
   updatedAt: true,
   district: { select: { id: true, name: true } },
+  attachments: {
+    where: { kind: "REPORT_PHOTO" },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      name: true,
+      mimeType: true,
+      url: true,
+      kind: true,
+      createdAt: true,
+    },
+  },
   _count: { select: { votes: true } },
 } as const
 

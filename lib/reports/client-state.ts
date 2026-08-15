@@ -42,10 +42,21 @@ export function serverReportToView(report: CommunityReportDto | OwnedReportDto):
     createdAt: report.createdAt,
     votes: report.votes,
     ...("authorId" in report ? { authorId: report.authorId } : {}),
-    attachments: [],
+    attachments: report.attachments,
     source: "server",
     hasVoted: report.hasVoted,
   }
+}
+
+export function mergeUploadedReportAttachment(
+  collections: ServerReportCollections,
+  reportId: string,
+  attachment: CommunityReportDto["attachments"][number],
+): ServerReportCollections {
+  const update = <T extends CommunityReportDto>(reports: readonly T[]): T[] => reports.map((report) =>
+    report.id === reportId ? { ...report, attachments: [attachment] } : report,
+  )
+  return { community: update(collections.community), mine: update(collections.mine) }
 }
 
 export function ownedLegacyReportViews(
@@ -94,6 +105,7 @@ function communityProjectionFromDetail(report: ReportDetailDto): CommunityReport
     updatedAt: report.updatedAt,
     votes: report.votes,
     hasVoted: report.hasVoted,
+    attachments: report.attachments,
   }
 }
 
@@ -176,6 +188,10 @@ export function legacyReportTrackingView(report: CitizenReportView): LegacyRepor
     timeline: [{ time: createdTime, text: "Locally stored report submitted" }],
     history: [],
     workOrders: [],
+    attachments: report.attachments.map((attachment) => ({
+      ...attachment,
+      createdAt: report.createdAt,
+    })),
     locallyStored: true,
   }
 }

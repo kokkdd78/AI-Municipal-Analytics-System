@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createReport } from "../lib/reports/client"
+import type { ReportDetailDto } from "../lib/reports/dto"
 import {
   awaitCurrentReportMutation,
   forwardReportAbortSignal,
@@ -13,6 +14,7 @@ import {
   reportRequestForExplicitLocation,
   reportSuccessPath,
   requestBrowserReportCoordinates,
+  submitReportWithOptionalImage,
   type ExplicitReportLocation,
 } from "../lib/reports/form-operation"
 
@@ -32,7 +34,7 @@ const browserLocation: ExplicitReportLocation = {
   source: "browser",
 }
 
-const createdReport = {
+const createdReport: ReportDetailDto = {
   id: "database-report-1",
   title: "Pothole",
   description: "A pothole blocks the lane.",
@@ -45,9 +47,10 @@ const createdReport = {
   updatedAt: "2026-08-15T10:00:00.000Z",
   votes: 0,
   hasVoted: false,
+  attachments: [],
   authorId: "citizen-1",
   statusHistory: [],
-} as const
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -239,5 +242,37 @@ describe("Phase 3A2 report form operation gate", () => {
     currentUserId = "citizen-2"
     response.resolve(createdReport)
     await expect(guarded).resolves.toEqual({ current: false })
+  })
+
+  it("retries only image upload after a report was already created", async () => {
+    const create = vi.fn().mockResolvedValue({ id: createdReport.id })
+    const upload = vi.fn()
+      .mockRejectedValueOnce(new Error("temporary image failure"))
+      .mockResolvedValueOnce(undefined)
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "street.png", { type: "image/png" })
+    const controller = new AbortController()
+    const report = reportRequestForExplicitLocation("pothole", "Road damage", mapLocation)!
+
+    const first = await submitReportWithOptionalImage({
+      existingReportId: null,
+      report,
+      image: file,
+      signal: controller.signal,
+      createReport: (input, signal) => create(input, signal),
+      uploadImage: (id, image, signal) => upload(id, image, signal),
+    })
+    expect(first).toEqual({ reportId: createdReport.id, image: "failed" })
+
+    const retry = await submitReportWithOptionalImage({
+      existingReportId: first.reportId,
+      report,
+      image: file,
+      signal: controller.signal,
+      createReport: (input, signal) => create(input, signal),
+      uploadImage: (id, image, signal) => upload(id, image, signal),
+    })
+    expect(retry).toEqual({ reportId: createdReport.id, image: "uploaded" })
+    expect(create).toHaveBeenCalledOnce()
+    expect(upload).toHaveBeenCalledTimes(2)
   })
 })

@@ -363,7 +363,7 @@ describe("Phase 3A1 guarded report API integration", { timeout: 60_000 }, () => 
     for (const report of community.reports) {
       expect(Object.keys(report)).toEqual([
         "id", "title", "description", "category", "status", "severity", "location",
-        "district", "createdAt", "updatedAt", "votes", "hasVoted",
+        "district", "createdAt", "updatedAt", "votes", "hasVoted", "attachments",
       ])
       expect(JSON.stringify(report)).not.toMatch(/phone|authEmail|authUsername|employeeId|account|session|authorId|voterId/i)
     }

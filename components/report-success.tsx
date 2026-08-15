@@ -4,8 +4,10 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, RefreshCw } from "lucide-react"
+import Image from "next/image"
 import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
 import { getReportDetail, ReportClientError, reportClientErrorMessage } from "@/lib/reports/client"
+import type { ReportDetailDto } from "@/lib/reports/dto"
 
 interface ReportSuccessProps {
   reportId?: string
@@ -23,6 +25,7 @@ function ReportSuccessContent({ reportId: propReportId }: ReportSuccessProps) {
   const router = useRouter()
   const reportId = propReportId
   const [verifiedReportId, setVerifiedReportId] = useState<string | null>(null)
+  const [report, setReport] = useState<ReportDetailDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
@@ -36,10 +39,14 @@ function ReportSuccessContent({ reportId: propReportId }: ReportSuccessProps) {
       if (!active) return
       setLoading(true)
       setVerifiedReportId(null)
+      setReport(null)
       setError(null)
       void getReportDetail(reportId, { signal: controller.signal })
-        .then(() => {
-          if (!controller.signal.aborted) setVerifiedReportId(reportId)
+        .then((loadedReport) => {
+          if (!controller.signal.aborted) {
+            setReport(loadedReport)
+            setVerifiedReportId(reportId)
+          }
         })
         .catch((requestError) => {
           if (!(requestError instanceof ReportClientError && requestError.kind === "aborted")) {
@@ -107,6 +114,17 @@ function ReportSuccessContent({ reportId: propReportId }: ReportSuccessProps) {
         <div className="flex justify-center">
           <CheckCircle2 className="w-24 h-24 text-green-500 animate-bounce" />
         </div>
+
+        {report?.attachments[0] && (
+          <Image
+            src={report.attachments[0].url}
+            alt={report.attachments[0].name}
+            width={800}
+            height={480}
+            unoptimized
+            className="h-52 w-full rounded-xl object-cover"
+          />
+        )}
 
         {/* Main Text */}
         <div className="space-y-3">

@@ -55,6 +55,30 @@ export function reportSuccessPath(reportId: string): string {
   return `/report-success?reportId=${encodeURIComponent(reportId)}`
 }
 
+export interface ReportSubmissionWithImageResult {
+  reportId: string
+  image: "none" | "uploaded" | "failed"
+}
+
+export async function submitReportWithOptionalImage(input: {
+  existingReportId: string | null
+  report: CreateReportRequest
+  image: File | null
+  signal: AbortSignal
+  createReport: (report: CreateReportRequest, signal: AbortSignal) => Promise<{ id: string }>
+  uploadImage: (reportId: string, image: File, signal: AbortSignal) => Promise<void>
+}): Promise<ReportSubmissionWithImageResult> {
+  const reportId = input.existingReportId
+    ?? (await input.createReport(input.report, input.signal)).id
+  if (!input.image) return { reportId, image: "none" }
+  try {
+    await input.uploadImage(reportId, input.image, input.signal)
+    return { reportId, image: "uploaded" }
+  } catch {
+    return { reportId, image: "failed" }
+  }
+}
+
 export const MAX_REPORT_DESCRIPTION_LENGTH = 2_000
 const OTHER_DESCRIPTION_PREFIX = "Other issue: "
 

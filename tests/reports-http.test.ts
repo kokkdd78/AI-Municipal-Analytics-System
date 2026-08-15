@@ -30,6 +30,7 @@ const createdReport = {
   votes: 0,
   authorId: citizen.id,
   hasVoted: false,
+  attachments: [],
   statusHistory: [],
 }
 

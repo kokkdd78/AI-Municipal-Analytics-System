@@ -1,4 +1,5 @@
 import type {
+  AttachmentKind as DatabaseAttachmentKind,
   ReportSeverity as DatabaseReportSeverity,
   ReportStatus as DatabaseReportStatus,
   WorkOrderPriority as DatabaseWorkOrderPriority,
@@ -12,6 +13,7 @@ import type {
 import type {
   ReportSeverity,
   ReportStatus,
+  AttachmentKind,
   WorkOrderPriority,
   WorkOrderStatus,
 } from "../../types/domain"
@@ -19,6 +21,15 @@ import type {
 export interface ReportDistrictDto {
   id: string
   name: string
+}
+
+export interface ReportAttachmentDto {
+  id: string
+  name: string
+  mimeType: string
+  url: string
+  kind: AttachmentKind
+  createdAt: string
 }
 
 export interface CommunityReportDto {
@@ -34,6 +45,7 @@ export interface CommunityReportDto {
   updatedAt: string
   votes: number
   hasVoted: boolean
+  attachments: ReportAttachmentDto[]
 }
 
 export interface OwnedReportDto extends CommunityReportDto {
@@ -79,6 +91,13 @@ export interface ReportStatusDto {
   timeline: { time: string; text: string }[]
   history: ReportStatusHistoryDto[]
   workOrders: WorkOrderProgressDto[]
+  attachments: ReportAttachmentDto[]
+}
+
+const ATTACHMENT_KIND: Record<DatabaseAttachmentKind, AttachmentKind> = {
+  REPORT_PHOTO: "report-photo",
+  COMPLETION_EVIDENCE: "completion-evidence",
+  AVATAR: "avatar",
 }
 
 const REPORT_STATUS: Record<DatabaseReportStatus, ReportStatus> = {
@@ -127,6 +146,14 @@ export function toCommunityReportDto(record: ReportProjectionRecord): CommunityR
     updatedAt: record.updatedAt.toISOString(),
     votes: record.importedVoteBaseline + record.voteCount,
     hasVoted: record.viewerHasVoted,
+    attachments: record.attachments.map((attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      url: attachment.url,
+      kind: ATTACHMENT_KIND[attachment.kind],
+      createdAt: attachment.createdAt.toISOString(),
+    })),
   }
 }
 
@@ -202,5 +229,6 @@ export function toReportStatusDto(
     })),
     history,
     workOrders: workOrders.map(toWorkOrderProgressDto),
+    attachments: report.attachments,
   }
 }

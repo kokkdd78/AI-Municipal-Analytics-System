@@ -4,7 +4,7 @@ import type React from "react"
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, ThumbsUp, MapPin, X, ChevronLeft } from "lucide-react"
+import { Plus, ThumbsUp, MapPin, X, ChevronLeft, RefreshCw } from "lucide-react"
 import { useState } from "react"
 import NewSuggestionProposal from "./new-suggestion-proposal"
 import { useUserLocation } from "@/context/location-context"
@@ -13,7 +13,6 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { JEDDAH_DISTRICTS, type District, findDistrictByName } from "@/constants/districts"
 import dynamic from "next/dynamic"
-import type { Suggestion } from "@/types/domain"
 
 const MapComponent = dynamic(() => import("./map-component"), {
   ssr: false,
@@ -22,19 +21,28 @@ const MapComponent = dynamic(() => import("./map-component"), {
 
 export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: string) => void }) {
   const { district } = useUserLocation()
-  const { suggestions, upvoteSuggestion, votedSuggestions } = useData()
+  const {
+    suggestions,
+    upvoteSuggestion,
+    votedSuggestions,
+    votingSuggestionIds,
+    suggestionLoadState,
+    suggestionMutationError,
+    refreshSuggestions,
+  } = useData()
   const [isNewProposalOpen, setIsNewProposalOpen] = useState(false)
-  const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null)
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null)
   const [selectedDistrict, setSelectedDistrict] = useState<District>(
     findDistrictByName(district || "") || JEDDAH_DISTRICTS[0],
   )
 
   const handleUpvote = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    upvoteSuggestion(id)
+    void upvoteSuggestion(id)
   }
 
   const filteredSuggestions = suggestions.filter((s) => s.district.id === selectedDistrict.id)
+  const selectedSuggestion = suggestions.find((suggestion) => suggestion.id === selectedSuggestionId) ?? null
 
   return (
     <div className="flex flex-col h-full bg-background relative">
@@ -80,7 +88,21 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
 
       {/* Suggestions List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {filteredSuggestions.length === 0 ? (
+        {(suggestionLoadState.error || suggestionMutationError) && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3" role="alert">
+            <p className="text-sm text-destructive">{suggestionLoadState.error ?? suggestionMutationError}</p>
+            {suggestionLoadState.error && (
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => void refreshSuggestions()}>
+                Retry
+              </Button>
+            )}
+          </div>
+        )}
+        {suggestionLoadState.isLoading ? (
+          <div className="flex items-center justify-center py-10 text-muted-foreground" role="status">
+            <RefreshCw className="mr-2 h-5 w-5 animate-spin" /> Loading suggestions…
+          </div>
+        ) : filteredSuggestions.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             <p>No suggestions for {selectedDistrict.name}.</p>
             <p className="text-sm">Be the first to propose an improvement!</p>
@@ -90,7 +112,7 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
             <Card
               key={suggestion.id}
               className="p-4 transition-all hover:border-primary/50 cursor-pointer"
-              onClick={() => setSelectedSuggestion(suggestion)}
+              onClick={() => setSelectedSuggestionId(suggestion.id)}
             >
               <div className="flex justify-between items-center">
                 <div className="flex-1 pr-4">
@@ -108,6 +130,7 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
                     className={`h-14 w-10 flex flex-col gap-1 p-0 ${
                       votedSuggestions.has(suggestion.id) ? "bg-primary text-white" : ""
                     }`}
+                    disabled={votedSuggestions.has(suggestion.id) || votingSuggestionIds.has(suggestion.id)}
                     onClick={(e) => handleUpvote(e, suggestion.id)}
                   >
                     <ThumbsUp className="h-4 w-4" />
@@ -128,7 +151,7 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
       />
 
       {/* Suggestion Details Modal */}
-      <Dialog open={!!selectedSuggestion} onOpenChange={(open) => !open && setSelectedSuggestion(null)}>
+      <Dialog open={!!selectedSuggestion} onOpenChange={(open) => !open && setSelectedSuggestionId(null)}>
         <DialogContent className="max-w-md p-0 overflow-hidden h-[60vh] flex flex-col">
           {selectedSuggestion && (
             <>
@@ -138,12 +161,15 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
                   zoom={15}
                   suggestions={[selectedSuggestion]}
                   suggestionsVisible={true}
+                  votedSuggestions={votedSuggestions}
+                  pendingSuggestions={votingSuggestionIds}
+                  onPinClick={(id, type) => { if (type === "suggestion") void upvoteSuggestion(id) }}
                 />
                 <Button
                   variant="secondary"
                   size="icon"
                   className="absolute top-4 right-4 z-[1000] rounded-full shadow-lg"
-                  onClick={() => setSelectedSuggestion(null)}
+                  onClick={() => setSelectedSuggestionId(null)}
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -170,10 +196,13 @@ export default function SuggestionsScreen({ onNavigate }: { onNavigate: (tab: st
                     <Button
                       variant={votedSuggestions.has(selectedSuggestion.id) ? "default" : "outline"}
                       size="sm"
+                      disabled={votedSuggestions.has(selectedSuggestion.id) || votingSuggestionIds.has(selectedSuggestion.id)}
                       onClick={(e) => handleUpvote(e, selectedSuggestion.id)}
                     >
                       <ThumbsUp className="h-4 w-4 mr-2" />
-                      Vote
+                      {votingSuggestionIds.has(selectedSuggestion.id)
+                        ? "Voting…"
+                        : votedSuggestions.has(selectedSuggestion.id) ? "Voted" : "Vote"}
                     </Button>
                   </div>
                 </div>

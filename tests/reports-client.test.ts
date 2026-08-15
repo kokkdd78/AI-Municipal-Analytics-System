@@ -23,6 +23,7 @@ const communityReport = {
   updatedAt: "2026-08-15T10:00:00.000Z",
   votes: 2,
   hasVoted: false,
+  attachments: [],
 } as const
 
 const ownedReport = { ...communityReport, authorId: "citizen-1" }
@@ -165,6 +166,7 @@ describe("Phase 3A2 typed report client", () => {
       timeline: [{ time: "2026-08-15T10:00:00.000Z", text: "Report submitted" }],
       history: detailReport.statusHistory,
       workOrders: [],
+      attachments: [],
     }
     vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(json(status)))
     await expect(getReportStatus("report-1")).resolves.toEqual(status)

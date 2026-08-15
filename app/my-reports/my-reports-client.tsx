@@ -10,6 +10,8 @@ import { useData } from "@/context/data-context"
 import { formatReportStatus } from "@/lib/report-utils"
 import type { ReportStatus } from "@/types/domain"
 import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
+import Image from "next/image"
+import { getReportPhotoUrl } from "@/lib/report-utils"
 
 export default function MyReportsPage() {
   return (
@@ -102,6 +104,7 @@ function MyReportsContent() {
           <div className="space-y-4">
             {reports.map((report) => {
               const { lat, lng } = report.location
+              const photoUrl = getReportPhotoUrl(report)
 
               return (
                 <Card
@@ -111,9 +114,18 @@ function MyReportsContent() {
                 >
                   <div className="flex gap-4">
                     <div className="flex-shrink-0 w-20 h-20 bg-muted rounded-lg overflow-hidden">
-                      <div className="w-full h-full">
-                        <StaticMap lat={lat} lng={lng} />
-                      </div>
+                      {photoUrl ? (
+                        <Image
+                          src={photoUrl}
+                          alt={report.title}
+                          width={160}
+                          height={160}
+                          unoptimized
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full"><StaticMap lat={lat} lng={lng} /></div>
+                      )}
                     </div>
 
                     {/* Report Details */}

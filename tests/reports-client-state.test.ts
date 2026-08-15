@@ -46,6 +46,7 @@ const serverReport = {
   updatedAt: "2026-08-15T11:00:00.000Z",
   votes: 8,
   hasVoted: true,
+  attachments: [],
 }
 
 const createdReport = {

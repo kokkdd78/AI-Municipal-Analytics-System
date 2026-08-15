@@ -14,7 +14,7 @@ import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 import { useAuth } from "@/context/auth-context"
 import { useData } from "@/context/data-context"
 import { ReportClientError, reportClientErrorMessage } from "@/lib/reports/client"
-import { manualReportAttachmentError } from "@/lib/reports/client-state"
+import { MAX_REPORT_IMAGE_BYTES, REPORT_IMAGE_MIME_TYPES } from "@/lib/report-images/contracts"
 import { findDistrictByName } from "@/constants/districts"
 import {
   createReportFormOperationGate,
@@ -23,6 +23,7 @@ import {
   requestBrowserReportCoordinates,
   reportRequestForExplicitLocation,
   reportSuccessPath,
+  submitReportWithOptionalImage,
   type ExplicitReportLocation,
 } from "@/lib/reports/form-operation"
 import { useRouter } from "next/navigation"
@@ -39,10 +40,13 @@ function ReportPageContent() {
   const { toast } = useToast()
   const router = useRouter()
   const { user } = useAuth()
-  const { createReport, isCreatingReport } = useData()
+  const { createReport, uploadReportImage, isCreatingReport } = useData()
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [description, setDescription] = useState("")
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
+  const [createdReportId, setCreatedReportId] = useState<string | null>(null)
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [selectedLocation, setSelectedLocation] = useState<ExplicitReportLocation | null>(
     INITIAL_EXPLICIT_REPORT_LOCATION,
@@ -64,6 +68,10 @@ function ReportPageContent() {
     }
   }, [])
 
+  useEffect(() => () => {
+    if (uploadedImage?.startsWith("blob:")) URL.revokeObjectURL(uploadedImage)
+  }, [uploadedImage])
+
   const issueTypes = [
     { id: "pothole", label: "Pothole", icon: AlertCircle },
     { id: "light", label: "Broken Light", icon: Lightbulb },
@@ -71,15 +79,24 @@ function ReportPageContent() {
     { id: "other", label: "Other", icon: AlertCircle },
   ]
 
+  const selectImage = (file: File) => {
+    if (!REPORT_IMAGE_MIME_TYPES.includes(file.type.toLowerCase() as (typeof REPORT_IMAGE_MIME_TYPES)[number])) {
+      toast({ title: "Unsupported Image", description: "Choose a JPEG, PNG, or WebP image.", variant: "destructive" })
+      return
+    }
+    if (file.size <= 0 || file.size > MAX_REPORT_IMAGE_BYTES) {
+      toast({ title: "Image Too Large", description: "Choose an image up to 5 MB.", variant: "destructive" })
+      return
+    }
+    if (uploadedImage?.startsWith("blob:")) URL.revokeObjectURL(uploadedImage)
+    setSelectedImageFile(file)
+    setUploadedImage(URL.createObjectURL(file))
+    setImageUploadError(null)
+  }
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        setUploadedImage(event.target?.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
+    if (file) selectImage(file)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -91,13 +108,7 @@ function ReportPageContent() {
     e.preventDefault()
     e.stopPropagation()
     const file = e.dataTransfer.files?.[0]
-    if (file && file.type.startsWith("image/")) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        setUploadedImage(event.target?.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
+    if (file) selectImage(file)
   }
 
   const handleClose = () => {
@@ -155,11 +166,6 @@ function ReportPageContent() {
       return
     }
 
-    const attachmentError = manualReportAttachmentError(uploadedImage)
-    if (attachmentError) {
-      toast({ title: "تعذر إرسال المرفق", description: attachmentError, variant: "destructive" })
-      return
-    }
     const request = reportRequestForExplicitLocation(selectedType, description, selectedLocation)
     if (!request) {
       setLocationError("يرجى تحديد موقع صحيح للبلاغ من الخريطة أو باستخدام موقعك الحالي.")
@@ -170,13 +176,35 @@ function ReportPageContent() {
     if (!operation) return
     setSubmitting(true)
     try {
-      const created = await createReport(request, { signal: operation.signal })
+      const result = await submitReportWithOptionalImage({
+        existingReportId: createdReportId,
+        report: request,
+        image: selectedImageFile,
+        signal: operation.signal,
+        createReport: (report, signal) => createReport(report, { signal }),
+        uploadImage: (reportId, image, signal) => uploadReportImage(reportId, image, { signal }),
+      })
+      const reportId = result.reportId
+      setCreatedReportId(reportId)
+      if (result.image === "failed") {
+        if (operationGateRef.current.isCurrent(operation)) {
+          const message = "Your report was saved, but its image could not be uploaded. Retry the image without creating another report."
+          setImageUploadError(message)
+          toast({ title: "Report Saved — Image Failed", description: message, variant: "destructive" })
+        }
+        return
+      }
+      setImageUploadError(null)
       if (operationGateRef.current.commitNavigation(operation)) {
-        router.push(reportSuccessPath(created.id))
+        router.push(reportSuccessPath(reportId))
       }
     } catch (error) {
       if (operationGateRef.current.isCurrent(operation) && !(error instanceof ReportClientError && error.kind === "aborted")) {
-        toast({ title: "Report Not Submitted", description: reportClientErrorMessage(error), variant: "destructive" })
+          toast({
+            title: createdReportId ? "Image Not Uploaded" : "Report Not Submitted",
+            description: createdReportId ? imageUploadError ?? "Retry the image upload." : reportClientErrorMessage(error),
+            variant: "destructive",
+          })
       }
     } finally {
       if (operationGateRef.current.finish(operation)) setSubmitting(false)
@@ -284,7 +312,7 @@ function ReportPageContent() {
             onDrop={handleDrop}
             className="border-2 border-dashed border-primary/30 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors bg-primary/5"
           >
-            <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="image-upload" />
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} className="hidden" id="image-upload" />
             <label htmlFor="image-upload" className="cursor-pointer">
               {uploadedImage ? (
                 <div className="relative">
@@ -302,7 +330,10 @@ function ReportPageContent() {
                     className="mt-2 text-xs font-medium text-destructive"
                     onClick={(event) => {
                       event.preventDefault()
+                      if (uploadedImage.startsWith("blob:")) URL.revokeObjectURL(uploadedImage)
                       setUploadedImage(null)
+                      setSelectedImageFile(null)
+                      setImageUploadError(null)
                     }}
                   >
                     Remove photo
@@ -312,7 +343,7 @@ function ReportPageContent() {
                 <>
                   <Camera className="h-8 w-8 text-primary mx-auto mb-2" />
                   <p className="text-sm font-medium text-foreground">Click or drag photo here</p>
-                  <p className="text-xs text-muted-foreground mt-1">Supports JPG, PNG, and GIF</p>
+                  <p className="text-xs text-muted-foreground mt-1">JPEG, PNG, or WebP up to 5 MB</p>
                 </>
               )}
             </label>
@@ -333,12 +364,29 @@ function ReportPageContent() {
 
       {/* Submit Button - Fixed at bottom */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border px-6 py-4">
+        {imageUploadError && (
+          <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="alert">
+            <p>{imageUploadError}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              disabled={submitting}
+              onClick={() => createdReportId && router.push(reportSuccessPath(createdReportId))}
+            >
+              Continue without image
+            </Button>
+          </div>
+        )}
         <Button
           onClick={handleSubmit}
           disabled={submitting || isCreatingReport}
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-12 rounded-lg"
         >
-          {submitting || isCreatingReport ? "Submitting..." : "Submit Report"}
+          {submitting || isCreatingReport
+            ? createdReportId ? "Uploading Image..." : "Submitting..."
+            : createdReportId ? "Retry Image Upload" : "Submit Report"}
         </Button>
       </div>
     </div>

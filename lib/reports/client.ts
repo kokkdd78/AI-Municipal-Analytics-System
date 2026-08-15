@@ -44,6 +44,16 @@ const locationSchema = z
   })
   .strict()
 const districtSchema = z.object({ id: reportIdSchema, name: z.string().min(1).max(191) }).strict()
+export const reportAttachmentDtoSchema = z
+  .object({
+    id: reportIdSchema,
+    name: z.string().min(1).max(255),
+    mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+    url: z.string().url().startsWith("https://"),
+    kind: z.literal("report-photo"),
+    createdAt: isoDateSchema,
+  })
+  .strict()
 
 const communityReportShape = {
   id: reportIdSchema,
@@ -58,6 +68,7 @@ const communityReportShape = {
   updatedAt: isoDateSchema,
   votes: z.number().int().nonnegative(),
   hasVoted: z.boolean(),
+  attachments: z.array(reportAttachmentDtoSchema).max(1),
 } as const
 
 export const communityReportDtoSchema: z.ZodType<CommunityReportDto> = z
@@ -114,6 +125,7 @@ export const reportStatusDtoSchema: z.ZodType<ReportStatusDto> = z
     timeline: z.array(z.object({ time: z.string().min(1), text: z.string().min(1) }).strict()),
     history: z.array(statusHistorySchema),
     workOrders: z.array(workOrderSchema),
+    attachments: z.array(reportAttachmentDtoSchema).max(1),
   })
   .strict()
 
@@ -273,6 +285,20 @@ export function createReport(
     body: JSON.stringify(input),
     signal: options.signal,
   })
+}
+
+export function uploadReportImage(
+  reportId: string,
+  image: File,
+  options: ReportRequestOptions = {},
+) {
+  const form = new FormData()
+  form.set("image", image)
+  return requestJson(
+    `/api/reports/${encodeURIComponent(reportId)}/image`,
+    reportAttachmentDtoSchema,
+    { method: "POST", body: form, signal: options.signal },
+  )
 }
 
 export function getReportDetail(id: string, options: ReportRequestOptions = {}): Promise<ReportDetailDto> {

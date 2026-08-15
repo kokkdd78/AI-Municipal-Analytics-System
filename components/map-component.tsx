@@ -28,6 +28,7 @@ interface MapComponentProps {
   votedReports?: Set<string>
   pendingReports?: Set<string>
   votedSuggestions?: Set<string>
+  pendingSuggestions?: Set<string>
 }
 
 function CenterTracker({ onCenterChange }: { onCenterChange?: (lat: number, lng: number) => void }) {
@@ -109,6 +110,7 @@ export default function MapComponent({
   votedReports = new Set(),
   pendingReports = new Set(),
   votedSuggestions = new Set(),
+  pendingSuggestions = new Set(),
 }: MapComponentProps) {
   useEffect(() => {
     // @ts-expect-error Leaflet keeps this internal icon URL helper off its public types.
@@ -242,13 +244,17 @@ export default function MapComponent({
                     <Button
                       size="sm"
                       className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700"
-                      disabled={votedSuggestions.has(suggestion.id)}
+                      disabled={votedSuggestions.has(suggestion.id) || pendingSuggestions.has(suggestion.id)}
                       onClick={(e) => {
                         e.stopPropagation()
                         onPinClick?.(suggestion.id, "suggestion")
                       }}
                     >
-                      <ThumbsUp className="h-3 w-3 mr-1" /> {votedSuggestions.has(suggestion.id) ? "Voted" : "Upvote"}
+                      <ThumbsUp className="h-3 w-3 mr-1" /> {
+                        pendingSuggestions.has(suggestion.id)
+                          ? "Voting…"
+                          : votedSuggestions.has(suggestion.id) ? "Voted" : "Upvote"
+                      }
                     </Button>
                   </div>
                 </div>

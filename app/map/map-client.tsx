@@ -30,6 +30,7 @@ function MapPageContent() {
     votedReports,
     votingReportIds,
     votedSuggestions,
+    votingSuggestionIds,
     upvoteReport,
     upvoteSuggestion,
     reportLoadState,
@@ -62,11 +63,12 @@ function MapPageContent() {
           votedSuggestions={votedSuggestions}
           onPinClick={(id, type) => {
             if (type === "report") void upvoteReport(id)
-            else upvoteSuggestion(id)
+            else void upvoteSuggestion(id)
           }}
           onReportSelect={(reportId) => {
             setSelectedReportId(reportId)
           }}
+          pendingSuggestions={votingSuggestionIds}
         />
 
         {(reportLoadState.isLoading || reportLoadState.error || reportMutationError) && (
