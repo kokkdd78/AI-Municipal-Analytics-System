@@ -50,6 +50,17 @@ enum WorkOrderPriority {
   HIGH   @map("High")
 }
 
+enum ArchiveStatus {
+  ARCHIVED @map("archived")
+}
+
+enum ArchiveAuditEventType {
+  ARCHIVED           @map("archived")
+  VIEWED             @map("viewed")
+  INTEGRITY_VERIFIED @map("integrity-verified")
+  INTEGRITY_FAILED   @map("integrity-failed")
+}
+
 model User {
   id                  String   @id @default(cuid())
   name                String
@@ -81,6 +92,8 @@ model User {
   reportStatusChanges     StatusHistory[]
   workOrderStatusChanges  WorkOrderStatusHistory[]
   auditLogs               AuditLog[]
+  archivedRecords         ArchiveRecord[]          @relation("ArchiveArchivedBy")
+  archiveAuditEvents      ArchiveAuditEvent[]      @relation("ArchiveAuditActor")
   authSessions            AuthSession[]
   authAccounts            AuthAccount[]
 
@@ -204,6 +217,7 @@ model Report {
   votes         Vote[]
   workOrders    WorkOrder[]
   statusHistory StatusHistory[]
+  archiveRecord ArchiveRecord?
 
   @@index([authorId])
   @@index([departmentId])
@@ -390,4 +404,49 @@ model AuditLog {
   @@index([actorId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@map("audit_logs")
+}
+
+model ArchiveRecord {
+  id              String        @id
+  ecmRecordNumber String        @unique
+  reportId        String        @unique
+  reportTitle     String
+  districtName    String
+  manifest        Json
+  storageKey      String        @unique
+  documentUrl     String
+  checksum        String
+  provider        String
+  status          ArchiveStatus @default(ARCHIVED)
+  archivedAt      DateTime
+  retentionUntil  DateTime
+  archivedById    String
+  createdAt       DateTime      @default(now())
+
+  report      Report              @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  archivedBy  User                @relation("ArchiveArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  auditEvents ArchiveAuditEvent[]
+
+  @@index([archivedAt])
+  @@index([retentionUntil])
+  @@index([status])
+  @@index([reportTitle])
+  @@index([districtName])
+  @@map("archive_records")
+}
+
+model ArchiveAuditEvent {
+  id              String                @id
+  archiveRecordId String
+  actorId         String?
+  type            ArchiveAuditEventType
+  details         Json?
+  createdAt       DateTime              @default(now())
+
+  archiveRecord ArchiveRecord @relation(fields: [archiveRecordId], references: [id], onDelete: Cascade)
+  actor         User?         @relation("ArchiveAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([archiveRecordId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("archive_audit_events")
 }

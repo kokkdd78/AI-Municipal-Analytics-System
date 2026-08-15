@@ -6,6 +6,8 @@
   "scripts": {
     "build": "next build",
     "auth:db:preflight": "node scripts/auth-db-preflight.ts",
+    "ecm:db:preflight": "tsx scripts/ecm-db-preflight.ts",
+    "ecm:db:postflight": "tsx scripts/ecm-db-preflight.ts --postflight",
     "auth:test:provision-demo": "node scripts/provision-test-auth-users.ts",
     "db:format": "prisma format",
     "db:generate": "prisma generate",
@@ -28,6 +30,7 @@
     "test:reports:3a1": "vitest run --maxWorkers=1 tests/reports-contracts.test.ts tests/reports-http.test.ts tests/report-status-route.test.ts tests/reports.integration.test.ts",
     "test:reports:3a2": "vitest run --maxWorkers=1 tests/reports-client.test.ts tests/reports-client-state.test.ts tests/reports-form-operation.test.ts tests/reports-contracts.test.ts tests/reports-http.test.ts tests/report-status-route.test.ts",
     "test:phase3b": "vitest run --maxWorkers=1 tests/report-images.test.ts tests/suggestions.test.ts tests/reports-form-operation.test.ts tests/phase3b.integration.test.ts",
+    "test:ecm": "vitest run --maxWorkers=1 tests/ecm.test.ts tests/ecm-ui.test.ts tests/ecm.integration.test.ts",
     "test:db": "vitest run --maxWorkers=1 tests/database.integration.test.ts tests/auth.integration.test.ts"
   },
   "dependencies": {

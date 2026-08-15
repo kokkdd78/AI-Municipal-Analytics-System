@@ -1,0 +1,5 @@
+import { archiveHttpHandlers } from "@/lib/ecm/server"
+
+export const dynamic = "force-dynamic"
+export const GET = archiveHttpHandlers.listGET
+export const POST = archiveHttpHandlers.archivePOST

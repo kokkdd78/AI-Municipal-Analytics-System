@@ -2,10 +2,11 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useAuth } from "@/context/auth-context"
-import { LogOut, Map, FileText, PenTool, AlertCircle, MapPin, Truck, ChevronDown } from "lucide-react"
+import { Archive, LogOut, Map, FileText, PenTool, AlertCircle, MapPin, Truck, ChevronDown } from "lucide-react"
 import WorkOrdersScreen from "./work-orders-screen"
 import UrbanPlanningScreen from "./urban-planning-screen"
 import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
@@ -84,6 +85,13 @@ function ManagerDashboardContent() {
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          <Link
+            href="/manager/archive"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-slate-400 hover:bg-slate-800"
+          >
+            <Archive className="h-5 w-5" />
+            <span className="text-sm font-medium">ECM Archive</span>
+          </Link>
           {menuItems.map((item) => {
             const Icon = item.icon
             return (
