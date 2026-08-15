@@ -9,14 +9,12 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import ReportFormModal from "./report-form-modal"
 import AiReportModal from "./ai-report-modal"
-import type { Report } from "@/types/domain"
-
 interface HomeScreenProps {
-  addReport?: (report: Report) => void
   reportsCount: number
+  reportsLoading: boolean
 }
 
-export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps) {
+export default function HomeScreen({ reportsCount, reportsLoading }: HomeScreenProps) {
   const { user } = useData()
   const router = useRouter()
   const [showReportModal, setShowReportModal] = useState(false)
@@ -31,12 +29,6 @@ export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps)
       .map((n) => n[0])
       .join("")
       .toUpperCase() || "U"
-
-  const handleReportSubmitted = (report: Report) => {
-    if (addReport) {
-      addReport(report)
-    }
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -63,7 +55,7 @@ export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps)
             onClick={() => router.push("/my-reports")}
           >
             <div className="flex flex-col items-center text-center">
-              <p className="text-3xl font-bold text-primary mb-1">{reportsCount}</p>
+              <p className="text-3xl font-bold text-primary mb-1">{reportsLoading ? "…" : reportsCount}</p>
               <p className="text-xs text-muted-foreground font-medium">Reports Submitted</p>
             </div>
           </Card>
@@ -103,10 +95,10 @@ export default function HomeScreen({ addReport, reportsCount }: HomeScreenProps)
         </div>
 
         {showReportModal && (
-          <ReportFormModal onClose={() => setShowReportModal(false)} onReportSubmitted={handleReportSubmitted} />
+          <ReportFormModal onClose={() => setShowReportModal(false)} />
         )}
         {showAiReportModal && (
-          <AiReportModal onClose={() => setShowAiReportModal(false)} onReportSubmitted={handleReportSubmitted} />
+          <AiReportModal onClose={() => setShowAiReportModal(false)} />
         )}
       </div>
     </div>

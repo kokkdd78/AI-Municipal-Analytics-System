@@ -11,7 +11,6 @@ import { Home, Map, Lightbulb, User } from "lucide-react"
 import { LocationProvider } from "@/context/location-context"
 import DistrictSelectorModal from "@/components/district-selector-modal"
 import { useData } from "@/context/data-context"
-import { isReportOwnedByUser } from "@/lib/report-utils"
 import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
 
 export default function CitizenApp() {
@@ -35,17 +34,13 @@ function CitizenProfileApp() {
 
 function CitizenAppContent() {
   const [activeTab, setActiveTab] = useState("home")
-  const { reports, addReport } = useData()
-
-  const { user } = useData()
-  const myReportsCount = user
-    ? reports.filter((report) => isReportOwnedByUser(report, user)).length
-    : 0
+  const { myReports, reportLoadState } = useData()
+  const myReportsCount = myReports.length
 
   const renderScreen = () => {
     switch (activeTab) {
       case "home":
-        return <HomeScreen addReport={addReport} reportsCount={myReportsCount} />
+        return <HomeScreen reportsCount={myReportsCount} reportsLoading={reportLoadState.isLoading} />
       case "map":
         return <MapScreen onNavigate={setActiveTab} />
       case "suggestions":
@@ -53,7 +48,7 @@ function CitizenAppContent() {
       case "profile":
         return <ProfileScreen onNavigate={setActiveTab} />
       default:
-        return <HomeScreen addReport={addReport} reportsCount={myReportsCount} />
+        return <HomeScreen reportsCount={myReportsCount} reportsLoading={reportLoadState.isLoading} />
     }
   }
 

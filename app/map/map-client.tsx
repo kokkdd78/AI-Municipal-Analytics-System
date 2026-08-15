@@ -9,7 +9,6 @@ import { useData } from "@/context/data-context"
 import { getReportPhotoUrl } from "@/lib/report-utils"
 import type { Report } from "@/types/domain"
 import Image from "next/image"
-import { handleStandaloneMapPinAction } from "@/lib/map-actions"
 import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 
 const MapComponent = dynamic(() => import("../../components/map-component"), {
@@ -25,10 +24,22 @@ export default function MapPage() {
 }
 
 function MapPageContent() {
-  const { reports, suggestions, votedReports, votedSuggestions, upvoteSuggestion } = useData()
+  const {
+    reports,
+    suggestions,
+    votedReports,
+    votingReportIds,
+    votedSuggestions,
+    upvoteReport,
+    upvoteSuggestion,
+    reportLoadState,
+    reportMutationError,
+    refreshReports,
+  } = useData()
   const [activeTab, setActiveTab] = useState("map")
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null)
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
   const [suggestionsVisible, setSuggestionsVisible] = useState(true)
+  const selectedReport: Report | null = reports.find((report) => report.id === selectedReportId) ?? null
 
   const selectedPhoto = selectedReport ? getReportPhotoUrl(selectedReport) : null
 
@@ -47,16 +58,31 @@ function MapPageContent() {
           suggestions={suggestions}
           suggestionsVisible={suggestionsVisible}
           votedReports={votedReports}
+          pendingReports={votingReportIds}
           votedSuggestions={votedSuggestions}
           onPinClick={(id, type) => {
-            handleStandaloneMapPinAction(id, type, {
-              selectReport: (reportId) => {
-                setSelectedReport(reports.find((report) => report.id === reportId) ?? null)
-              },
-              upvoteSuggestion,
-            })
+            if (type === "report") void upvoteReport(id)
+            else upvoteSuggestion(id)
+          }}
+          onReportSelect={(reportId) => {
+            setSelectedReportId(reportId)
           }}
         />
+
+        {(reportLoadState.isLoading || reportLoadState.error || reportMutationError) && (
+          <div className="absolute top-4 left-4 right-4 z-20 rounded-lg border bg-background/95 p-3 shadow-lg">
+            {reportLoadState.isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading community reports…</p>
+            ) : (
+              <>
+                <p className="text-sm text-destructive">{reportLoadState.error ?? reportMutationError}</p>
+                {reportLoadState.error && (
+                  <Button size="sm" variant="outline" className="mt-2" onClick={() => void refreshReports()}>Retry</Button>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Layer Toggle */}
         <button
@@ -94,7 +120,7 @@ function MapPageContent() {
 
             <Button
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
-              onClick={() => setSelectedReport(null)}
+              onClick={() => setSelectedReportId(null)}
             >
               Close
             </Button>

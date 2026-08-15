@@ -4,14 +4,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { MapPin, AlertTriangle, Droplets, Lightbulb, Trees, Trash2, HelpCircle } from "lucide-react"
 import MapSelectorModal from "./map-selector-modal"
-import { DuplicateDetectionModal } from "./duplicate-detection-modal"
 import { useToast } from "@/hooks/use-toast"
 import { useData } from "@/context/data-context"
-import type { Report } from "@/types/domain"
 import Image from "next/image"
+import { useAuth } from "@/context/auth-context"
+import { findDistrictByName } from "@/constants/districts"
+import { ReportClientError, reportClientErrorMessage } from "@/lib/reports/client"
+import { manualReportAttachmentError } from "@/lib/reports/client-state"
+import {
+  createReportFormOperationGate,
+  reportDescriptionForSubmission,
+  reportSuccessPath,
+} from "@/lib/reports/form-operation"
+import { useRouter } from "next/navigation"
 
 const issueTypes = [
   { id: "trash", label: "Trash", icon: Trash2 },
@@ -24,32 +32,38 @@ const issueTypes = [
 
 interface ReportFormModalProps {
   onClose: () => void
-  onReportSubmitted: (report: Report) => void
 }
 
 interface FormErrors {
   issueType?: string
+  otherDescription?: string
   description?: string
   location?: string
 }
 
-export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFormModalProps) {
+export default function ReportFormModal({ onClose }: ReportFormModalProps) {
   const { toast } = useToast()
-  const { user } = useData()
+  const router = useRouter()
+  const { user: authenticatedUser } = useAuth()
+  const { user, createReport, isCreatingReport } = useData()
   const [loading, setLoading] = useState(false)
+  const operationGateRef = useRef(createReportFormOperationGate())
 
   const [selectedIssueType, setSelectedIssueType] = useState("")
   const [otherDescription, setOtherDescription] = useState("")
   const [description, setDescription] = useState("")
   const [selectedLat, setSelectedLat] = useState<number | null>(21.5433)
   const [selectedLng, setSelectedLng] = useState<number | null>(39.1728)
-  const [selectedDistrictName, setSelectedDistrictName] = useState("")
+  const [selectedDistrictName, setSelectedDistrictName] = useState(
+    authenticatedUser?.district?.name ?? user?.district ?? "",
+  )
+  const [selectedDistrictId, setSelectedDistrictId] = useState(authenticatedUser?.district?.id ?? "")
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
 
   const [showMap, setShowMap] = useState(false)
-  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
-
   const [formErrors, setFormErrors] = useState<FormErrors>({})
+
+  useEffect(() => () => operationGateRef.current.dispose(), [])
 
   const handleSubmit = async () => {
     const errors: FormErrors = {}
@@ -62,8 +76,18 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
       errors.description = "Please enter a description"
     }
 
-    if (!selectedLat || !selectedLng) {
+    if (selectedIssueType === "other" && !otherDescription.trim()) {
+      errors.otherDescription = "Please specify the issue"
+    }
+
+    if (selectedLat === null || selectedLng === null || !selectedDistrictId) {
       errors.location = "Please select a location on the map"
+    }
+
+    const attachmentError = manualReportAttachmentError(uploadedPhoto)
+    if (attachmentError) {
+      toast({ title: "تعذر إرسال المرفق", description: attachmentError, variant: "destructive" })
+      return
     }
 
     if (Object.keys(errors).length > 0) {
@@ -71,19 +95,24 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
       return
     }
 
-    // Mock duplicate detection logic
-    const isDuplicate = false
-
-    if (isDuplicate) {
-      setShowDuplicateModal(true)
+    const submissionDescription = reportDescriptionForSubmission(
+      selectedIssueType,
+      otherDescription,
+      description,
+    )
+    if (!submissionDescription) {
+      setFormErrors((current) => ({
+        ...current,
+        description: "The combined report description must be 2,000 characters or fewer",
+      }))
       return
     }
 
-    saveReport()
+    await saveReport(submissionDescription)
   }
 
-  const saveReport = async () => {
-    if (!user) {
+  const saveReport = async (submissionDescription: string) => {
+    if (!user || !authenticatedUser?.district) {
       toast({
         title: "Session Required",
         description: "Please sign in again before submitting a report.",
@@ -92,41 +121,30 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
       return
     }
 
+    const operation = operationGateRef.current.begin()
+    if (!operation) return
     setLoading(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    const newReport: Report = {
-      id: `report-${Date.now()}`,
-      title:
-        selectedIssueType === "other"
-          ? otherDescription
-          : issueTypes.find((t) => t.id === selectedIssueType)?.label || "New Report",
-      category: selectedIssueType,
-      description,
-      location: { lat: selectedLat!, lng: selectedLng! },
-      district: selectedDistrictName || "Unknown District",
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      votes: 0,
-      authorId: user.id,
-      attachments: uploadedPhoto
-        ? [
-            {
-              id: `attachment-${Date.now()}`,
-              name: "Report photo",
-              mimeType: "image/*",
-              url: uploadedPhoto,
-              kind: "report-photo",
-            },
-          ]
-        : [],
+    try {
+      const created = await createReport({
+        category: selectedIssueType,
+        description: submissionDescription,
+        districtId: selectedDistrictId,
+        location: { lat: selectedLat!, lng: selectedLng! },
+      }, { signal: operation.signal })
+      if (operationGateRef.current.commitNavigation(operation)) {
+        router.push(reportSuccessPath(created.id))
+      }
+    } catch (error) {
+      if (operationGateRef.current.isCurrent(operation) && !(error instanceof ReportClientError && error.kind === "aborted")) {
+        toast({
+          title: "Report Not Submitted",
+          description: reportClientErrorMessage(error),
+          variant: "destructive",
+        })
+      }
+    } finally {
+      if (operationGateRef.current.finish(operation)) setLoading(false)
     }
-
-    onReportSubmitted(newReport)
-    setLoading(false)
-
-    window.location.href = `/report-success?reportId=${newReport.id}`
   }
 
   return (
@@ -149,38 +167,17 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
             setSelectedLat(lat)
             setSelectedLng(lng)
             setSelectedDistrictName(district)
+            setSelectedDistrictId(findDistrictByName(district)?.id ?? "")
             setShowMap(false)
-            setFormErrors((prev) => ({ ...prev, location: undefined }))
+            setFormErrors((prev) => ({
+              ...prev,
+              location: findDistrictByName(district) ? undefined : "Please select a supported Jeddah district",
+            }))
           }}
         />
       )}
 
-      {showDuplicateModal && (
-        <DuplicateDetectionModal
-          open={showDuplicateModal}
-          photoUrl={uploadedPhoto}
-          description={description}
-          issueType={selectedIssueType}
-          lat={selectedLat!}
-          lng={selectedLng!}
-          district={selectedDistrictName}
-          onClose={() => setShowDuplicateModal(false)}
-          onConfirmDuplicate={() => {
-            toast({
-              title: "Report Upvoted",
-              description: "You have upvoted the existing report.",
-            })
-            setShowDuplicateModal(false)
-            onClose()
-          }}
-          onSubmitNew={() => {
-            setShowDuplicateModal(false)
-            saveReport()
-          }}
-        />
-      )}
-
-      <Dialog open={!showDuplicateModal} onOpenChange={onClose}>
+      <Dialog open={true} onOpenChange={(open) => { if (!open && !loading) onClose() }}>
         <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto bg-[#F5F7F5] p-0">
           <DialogHeader className="sticky top-0 bg-[#F5F7F5] z-10 px-6 pt-6 pb-4 border-b border-[#1B4D3E]/10">
             <DialogTitle className="text-xl font-serif text-[#1B4D3E]">Report an Issue</DialogTitle>
@@ -242,10 +239,18 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
                   <label className="text-sm font-semibold text-[#1B4D3E] mb-2 block">Specify the Issue</label>
                   <Input
                     value={otherDescription}
-                    onChange={(e) => setOtherDescription(e.target.value)}
+                    onChange={(e) => {
+                      setOtherDescription(e.target.value)
+                      if (e.target.value.trim()) {
+                        setFormErrors((current) => ({ ...current, otherDescription: undefined }))
+                      }
+                    }}
                     placeholder="e.g. Broken Bench, Graffiti..."
-                    className="bg-white border rounded-xl"
+                    className={`bg-white border rounded-xl ${formErrors.otherDescription ? "border-red-500 border-2" : ""}`}
                   />
+                  {formErrors.otherDescription && (
+                    <p className="text-red-500 text-sm mt-2">{formErrors.otherDescription}</p>
+                  )}
                 </div>
               )}
             </div>
@@ -338,7 +343,7 @@ export default function ReportFormModal({ onClose, onReportSubmitted }: ReportFo
             <Button
               onClick={handleSubmit}
               className="w-full bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white rounded-xl h-12 text-base font-semibold shadow-sm"
-              disabled={loading}
+              disabled={loading || isCreatingReport}
             >
               {loading ? "Submitting..." : "Submit Report"}
             </Button>

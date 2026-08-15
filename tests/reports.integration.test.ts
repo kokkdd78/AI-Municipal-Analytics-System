@@ -43,6 +43,7 @@ const IDS = {
   assignment: `${PREFIX}assignment`,
   pendingHistory: `${PREFIX}pending-history`,
   progressHistory: `${PREFIX}progress-history`,
+  personalizedVote: `${PREFIX}personalized-vote`,
 }
 
 let database: PrismaClient
@@ -179,6 +180,9 @@ describe("Phase 3A1 guarded report API integration", { timeout: 60_000 }, () => 
         { id: IDS.pendingHistory, reportId: IDS.assignedReport, actorId: IDS.manager, fromStatus: null, toStatus: ReportStatus.PENDING, note: "Report submitted", createdAt: new Date("2026-08-15T10:00:00.000Z") },
         { id: IDS.progressHistory, reportId: IDS.assignedReport, actorId: IDS.manager, fromStatus: ReportStatus.PENDING, toStatus: ReportStatus.IN_PROGRESS, note: "Crew dispatched", createdAt: new Date("2026-08-15T10:01:00.000Z") },
       ],
+    })
+    await database.vote.create({
+      data: { id: IDS.personalizedVote, reportId: IDS.citizenOneReport, userId: IDS.citizenTwo },
     })
     await database.workOrder.create({
       data: {
@@ -343,21 +347,25 @@ describe("Phase 3A1 guarded report API integration", { timeout: 60_000 }, () => 
       request("/api/reports?scope=mine&limit=50", { userId: IDS.citizenOne }),
     )
     expect(mineResponse.status).toBe(200)
-    const mine = (await mineResponse.json()) as { reports: Array<{ authorId: string }> }
+    const mine = (await mineResponse.json()) as { reports: Array<{ authorId: string; hasVoted: boolean }> }
     expect(mine.reports.length).toBeGreaterThan(0)
     expect(mine.reports.every((report) => report.authorId === IDS.citizenOne)).toBe(true)
+    expect(mine.reports.find((report) => report.authorId === IDS.citizenOne)?.hasVoted).toBe(false)
 
     const communityResponse = await handlers.collectionGET(
       request("/api/reports?scope=community&limit=50", { userId: IDS.citizenTwo }),
     )
     const community = (await communityResponse.json()) as { reports: Array<Record<string, unknown>> }
-    expect(community.reports.some((report) => report.id === IDS.citizenOneReport)).toBe(true)
+    expect(community.reports).toContainEqual(expect.objectContaining({
+      id: IDS.citizenOneReport,
+      hasVoted: true,
+    }))
     for (const report of community.reports) {
       expect(Object.keys(report)).toEqual([
         "id", "title", "description", "category", "status", "severity", "location",
-        "district", "createdAt", "updatedAt", "votes",
+        "district", "createdAt", "updatedAt", "votes", "hasVoted",
       ])
-      expect(JSON.stringify(report)).not.toMatch(/phone|authEmail|authUsername|employeeId|account|session|authorId/i)
+      expect(JSON.stringify(report)).not.toMatch(/phone|authEmail|authUsername|employeeId|account|session|authorId|voterId/i)
     }
   })
 

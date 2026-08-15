@@ -64,9 +64,12 @@ describe("Phase 2B2B authentication UI boundaries", () => {
   it("binds DataContext to the exact authenticated Citizen ID", () => {
     const dataContext = source("context/data-context.tsx")
 
-    expect(dataContext).toContain("getProfileForAuthenticatedUser(storedState, authenticatedUser.id)")
-    expect(dataContext).toContain("updateProfileForAuthenticatedUser(authenticatedUser.id, updates)")
-    expect(dataContext).toContain("authorId: authenticatedUser.id")
+    expect(dataContext).toContain('const citizenId = authenticatedUser?.role === "Citizen" ? authenticatedUser.id : null')
+    expect(dataContext).toContain("getProfileForAuthenticatedUser(storedState, citizenId)")
+    expect(dataContext).toContain("updateProfileForAuthenticatedUser(citizenId, updates)")
+    expect(dataContext).toContain("ownedLegacyReportViews(")
+    expect(dataContext).toContain("serverReportToView")
+    expect(dataContext).not.toContain("reports: [...reports")
     expect(dataContext).toContain('authenticatedUser?.role === "Citizen"')
     expect(dataContext).not.toContain("DEFAULT_USER")
   })

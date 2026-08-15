@@ -33,6 +33,7 @@ export interface CommunityReportDto {
   createdAt: string
   updatedAt: string
   votes: number
+  hasVoted: boolean
 }
 
 export interface OwnedReportDto extends CommunityReportDto {
@@ -125,6 +126,7 @@ export function toCommunityReportDto(record: ReportProjectionRecord): CommunityR
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     votes: record.importedVoteBaseline + record.voteCount,
+    hasVoted: record.viewerHasVoted,
   }
 }
 

@@ -21,10 +21,12 @@ interface MapComponentProps {
   suggestions?: Suggestion[]
   suggestionsVisible?: boolean
   onPinClick?: (id: string, type: "report" | "suggestion") => void
+  onReportSelect?: (id: string) => void
   onCenterChange?: (lat: number, lng: number) => void
   zoom?: number
   draggable?: boolean
   votedReports?: Set<string>
+  pendingReports?: Set<string>
   votedSuggestions?: Set<string>
 }
 
@@ -101,9 +103,11 @@ export default function MapComponent({
   suggestions = [],
   suggestionsVisible = false,
   onPinClick,
+  onReportSelect,
   onCenterChange,
   zoom = 13,
   votedReports = new Set(),
+  pendingReports = new Set(),
   votedSuggestions = new Set(),
 }: MapComponentProps) {
   useEffect(() => {
@@ -178,6 +182,7 @@ export default function MapComponent({
             key={`report-${report.id}`}
             position={[report.location.lat, report.location.lng]}
             icon={getMarkerIcon(report.votes)}
+            eventHandlers={{ click: () => onReportSelect?.(report.id) }}
           >
             <Popup className="min-w-[200px]">
               <div className="space-y-2">
@@ -202,13 +207,15 @@ export default function MapComponent({
                   <Button
                     size="sm"
                     className="h-7 px-2 text-xs"
-                    disabled={votedReports.has(report.id)}
+                    disabled={votedReports.has(report.id) || pendingReports.has(report.id)}
                     onClick={(e) => {
                       e.stopPropagation()
                       onPinClick?.(report.id, "report")
                     }}
                   >
-                    <ThumbsUp className="h-3 w-3 mr-1" /> {votedReports.has(report.id) ? "Voted" : "Upvote"}
+                    <ThumbsUp className="h-3 w-3 mr-1" />{
+                      pendingReports.has(report.id) ? "Voting…" : votedReports.has(report.id) ? "Voted" : "Upvote"
+                    }
                   </Button>
                 </div>
               </div>

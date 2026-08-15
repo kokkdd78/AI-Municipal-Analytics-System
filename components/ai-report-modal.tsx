@@ -8,22 +8,18 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { Camera, X, MapPin } from "lucide-react"
-import type { Report } from "@/types/domain"
 import { useUserLocation } from "@/context/location-context"
-import { useData } from "@/context/data-context"
 import NextImage from "next/image"
+import { aiReportSubmissionError } from "@/lib/reports/client-state"
 
 interface AiReportModalProps {
   onClose: () => void
-  onReportSubmitted?: (report: Report) => void
 }
 
-export default function AiReportModal({ onClose, onReportSubmitted }: AiReportModalProps) {
+export default function AiReportModal({ onClose }: AiReportModalProps) {
   const { toast } = useToast()
-  const { location, district } = useUserLocation()
-  const { user } = useData()
+  const { district } = useUserLocation()
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; mimeType: string } | null>(null)
   const [category, setCategory] = useState("Infrastructure Issue")
   const [description, setDescription] = useState("")
 
@@ -70,7 +66,6 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
       try {
         const compressedBase64 = await compressImage(file)
         setUploadedPhoto(compressedBase64)
-        setUploadedFile({ name: file.name, mimeType: file.type })
       } catch (error) {
         console.error("Upload error:", error)
         toast({
@@ -83,11 +78,6 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
   }
 
   const handleSubmit = () => {
-    if (!user) {
-      toast({ title: "Session Required", description: "Please sign in again before submitting a report.", variant: "destructive" })
-      return
-    }
-
     if (!description.trim()) {
       toast({
         title: "Description Required",
@@ -96,49 +86,11 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
       })
       return
     }
-
-    if (onReportSubmitted) {
-      const reportLat = location?.lat ?? 21.5433
-      const reportLng = location?.lng ?? 39.1728
-      const reportDistrict = district ?? "Unknown District"
-
-      // Add a small random offset if it's the exact default center to prevent stacking
-      const randomOffset = location ? 0 : (Math.random() - 0.5) * 0.01
-
-      const reportId = `report-${Date.now()}`
-
-      const reportForApp: Report = {
-        id: reportId,
-        title: category,
-        category,
-        location: {
-          lat: reportLat + randomOffset,
-          lng: reportLng + randomOffset,
-        },
-        votes: 0,
-        description,
-        status: "pending",
-        district: reportDistrict,
-        createdAt: new Date().toISOString(),
-        authorId: user.id,
-        attachments:
-          uploadedPhoto && uploadedFile
-            ? [
-                {
-                  id: `attachment-${Date.now()}`,
-                  name: uploadedFile.name,
-                  mimeType: uploadedFile.mimeType,
-                  url: uploadedPhoto,
-                  kind: "report-photo",
-                },
-              ]
-            : [],
-      }
-
-      onReportSubmitted(reportForApp)
-
-      window.location.href = `/report-success?reportId=${reportId}`
-    }
+    toast({
+      title: "الخدمة غير متاحة حالياً",
+      description: aiReportSubmissionError(),
+      variant: "destructive",
+    })
   }
 
   return (
@@ -186,7 +138,6 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
                 <button
                   onClick={() => {
                     setUploadedPhoto(null)
-                    setUploadedFile(null)
                     setDescription("")
                   }}
                   className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"
@@ -247,7 +198,7 @@ export default function AiReportModal({ onClose, onReportSubmitted }: AiReportMo
                   size="lg"
                   disabled={!description.trim()}
                 >
-                  Submit Report
+                  الخدمة غير متاحة حالياً
                 </Button>
               </div>
             </div>

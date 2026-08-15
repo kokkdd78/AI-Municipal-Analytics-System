@@ -15,13 +15,24 @@ const MapComponent = dynamic(() => import("./map-component"), {
 })
 
 export default function MapScreen({ onNavigate }: { onNavigate: (tab: string) => void }) {
-  const { reports, upvoteReport, votedReports, suggestions, upvoteSuggestion, votedSuggestions } = useData()
+  const {
+    reports,
+    upvoteReport,
+    votedReports,
+    votingReportIds,
+    reportLoadState,
+    reportMutationError,
+    refreshReports,
+    suggestions,
+    upvoteSuggestion,
+    votedSuggestions,
+  } = useData()
   const { location } = useUserLocation()
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
 
   const handlePinClick = (id: string, type: "report" | "suggestion") => {
     if (type === "report") {
-      upvoteReport(id)
+      void upvoteReport(id)
     } else {
       upvoteSuggestion(id)
     }
@@ -36,8 +47,24 @@ export default function MapScreen({ onNavigate }: { onNavigate: (tab: string) =>
         suggestionsVisible={suggestionsVisible}
         onPinClick={handlePinClick}
         votedReports={votedReports}
+        pendingReports={votingReportIds}
         votedSuggestions={votedSuggestions}
       />
+
+      {(reportLoadState.isLoading || reportLoadState.error || reportMutationError) && (
+        <div className="absolute top-20 left-4 right-4 z-[1000] rounded-lg border bg-background/95 p-3 shadow-lg">
+          {reportLoadState.isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading community reports…</p>
+          ) : (
+            <>
+              <p className="text-sm text-destructive">{reportLoadState.error ?? reportMutationError}</p>
+              {reportLoadState.error && (
+                <Button size="sm" variant="outline" className="mt-2" onClick={() => void refreshReports()}>Retry</Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Controls */}
       <div className="absolute top-4 left-4 z-[1000]">

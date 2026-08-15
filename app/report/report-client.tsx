@@ -2,16 +2,30 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import Link from "next/link"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import MapSelectorModal from "@/components/map-selector-modal"
 import { useToast } from "@/hooks/use-toast"
-import { DuplicateDetectionModal } from "@/components/duplicate-detection-modal"
 import { X, MapPin, Trash2, Lightbulb, AlertCircle, Camera } from "lucide-react"
 import Image from "next/image"
 import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
+import { useAuth } from "@/context/auth-context"
+import { useData } from "@/context/data-context"
+import { ReportClientError, reportClientErrorMessage } from "@/lib/reports/client"
+import { manualReportAttachmentError } from "@/lib/reports/client-state"
+import { findDistrictByName } from "@/constants/districts"
+import {
+  createReportFormOperationGate,
+  hasValidReportCoordinates,
+  INITIAL_EXPLICIT_REPORT_LOCATION,
+  requestBrowserReportCoordinates,
+  reportRequestForExplicitLocation,
+  reportSuccessPath,
+  type ExplicitReportLocation,
+} from "@/lib/reports/form-operation"
+import { useRouter } from "next/navigation"
 
 export default function ReportPage() {
   return (
@@ -23,10 +37,32 @@ export default function ReportPage() {
 
 function ReportPageContent() {
   const { toast } = useToast()
+  const router = useRouter()
+  const { user } = useAuth()
+  const { createReport, isCreatingReport } = useData()
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [description, setDescription] = useState("")
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
-  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [selectedLocation, setSelectedLocation] = useState<ExplicitReportLocation | null>(
+    INITIAL_EXPLICIT_REPORT_LOCATION,
+  )
+  const [showMap, setShowMap] = useState(false)
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const operationGateRef = useRef(createReportFormOperationGate())
+  const locationRequestActiveRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    const operationGate = operationGateRef.current
+    return () => {
+      mountedRef.current = false
+      locationRequestActiveRef.current = false
+      operationGate.dispose()
+    }
+  }, [])
 
   const issueTypes = [
     { id: "pothole", label: "Pothole", icon: AlertCircle },
@@ -64,7 +100,52 @@ function ReportPageContent() {
     }
   }
 
-  const handleSubmit = () => {
+  const handleClose = () => {
+    if (submitting || isCreatingReport || !operationGateRef.current.canClose()) return
+    router.push("/citizen-app")
+  }
+
+  const handleMapLocation = (lat: number, lng: number, districtName: string) => {
+    const coordinates = { lat, lng }
+    const district = findDistrictByName(districtName)
+    if (!hasValidReportCoordinates(coordinates) || !district) {
+      setLocationError("تعذر تأكيد الحي لهذا الموقع. اختر نقطة داخل حي مدعوم في جدة.")
+      return
+    }
+    setSelectedLocation({ ...coordinates, districtId: district.id, districtName: district.name, source: "map" })
+    setLocationError(null)
+    setShowMap(false)
+  }
+
+  const handleBrowserLocation = async () => {
+    if (locationRequestActiveRef.current || submitting || isCreatingReport) return
+    locationRequestActiveRef.current = true
+    setDetectingLocation(true)
+    setLocationError(null)
+    try {
+      const coordinates = await requestBrowserReportCoordinates(navigator.geolocation)
+      if (!mountedRef.current) return
+      if (!user?.district) {
+        setLocationError("تعذر تأكيد حي البلاغ من الحساب. اختر الموقع والحي من الخريطة.")
+        return
+      }
+      setSelectedLocation({
+        ...coordinates,
+        districtId: user.district.id,
+        districtName: user.district.name,
+        source: "browser",
+      })
+    } catch {
+      if (mountedRef.current) {
+        setLocationError("تعذر تحديد موقعك. لم يتم استخدام أي موقع افتراضي؛ اختر الموقع من الخريطة.")
+      }
+    } finally {
+      locationRequestActiveRef.current = false
+      if (mountedRef.current) setDetectingLocation(false)
+    }
+  }
+
+  const handleSubmit = async () => {
     if (!selectedType || !description.trim()) {
       toast({
         title: "Incomplete Form",
@@ -74,41 +155,54 @@ function ReportPageContent() {
       return
     }
 
-    setShowDuplicateModal(true)
-  }
+    const attachmentError = manualReportAttachmentError(uploadedImage)
+    if (attachmentError) {
+      toast({ title: "تعذر إرسال المرفق", description: attachmentError, variant: "destructive" })
+      return
+    }
+    const request = reportRequestForExplicitLocation(selectedType, description, selectedLocation)
+    if (!request) {
+      setLocationError("يرجى تحديد موقع صحيح للبلاغ من الخريطة أو باستخدام موقعك الحالي.")
+      return
+    }
 
-  const handleUpvoteExisting = () => {
-    setShowDuplicateModal(false)
-    toast({
-      title: "Success!",
-      description: "Your upvote has been added to the existing report.",
-    })
-    setSelectedType(null)
-    setDescription("")
-    setUploadedImage(null)
-  }
-
-  const handleSubmitAsNew = () => {
-    setShowDuplicateModal(false)
-    toast({
-      title: "Report Submitted!",
-      description: "Thank you for reporting this issue. We'll investigate shortly.",
-    })
-    setSelectedType(null)
-    setDescription("")
-    setUploadedImage(null)
+    const operation = operationGateRef.current.begin()
+    if (!operation) return
+    setSubmitting(true)
+    try {
+      const created = await createReport(request, { signal: operation.signal })
+      if (operationGateRef.current.commitNavigation(operation)) {
+        router.push(reportSuccessPath(created.id))
+      }
+    } catch (error) {
+      if (operationGateRef.current.isCurrent(operation) && !(error instanceof ReportClientError && error.kind === "aborted")) {
+        toast({ title: "Report Not Submitted", description: reportClientErrorMessage(error), variant: "destructive" })
+      }
+    } finally {
+      if (operationGateRef.current.finish(operation)) setSubmitting(false)
+    }
   }
 
   return (
     <div className="h-screen bg-background flex flex-col pb-8">
+      {showMap && (
+        <MapSelectorModal
+          onClose={() => setShowMap(false)}
+          onSelect={handleMapLocation}
+        />
+      )}
       {/* Header */}
       <div className="px-6 pt-4 pb-4 bg-card border-b border-border flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground">Report an Issue</h1>
-        <Link href="/citizen-app">
-          <button className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="h-6 w-6" />
-          </button>
-        </Link>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={handleClose}
+          disabled={submitting || isCreatingReport}
+          aria-label="Close report form"
+        >
+          <X className="h-6 w-6" />
+        </button>
       </div>
 
       {/* Scrollable Content */}
@@ -116,10 +210,41 @@ function ReportPageContent() {
         {/* Location Preview */}
         <div className="mb-8">
           <label className="text-sm font-semibold text-foreground mb-2 block">Selected Location</label>
-          <Card className="p-4 bg-slate-100 border border-border rounded-lg overflow-hidden relative h-32">
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-slate-200 flex items-center justify-center">
-              <MapPin className="h-8 w-8 text-primary" />
+          <Card className="p-4 bg-slate-100 border border-border rounded-lg overflow-hidden min-h-32">
+            <div className="flex items-start gap-3">
+              <MapPin className="h-7 w-7 text-primary shrink-0" />
+              <div className="min-w-0">
+                {selectedLocation ? (
+                  <>
+                    <p className="font-medium text-foreground">{selectedLocation.districtName}</p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {selectedLocation.source === "browser"
+                        ? "الحي المعتمد من حسابك؛ الإحداثيات من موقع المتصفح."
+                        : "تم تأكيد الإحداثيات والحي من اختيار الخريطة."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">لم يتم تحديد موقع للبلاغ.</p>
+                )}
+              </div>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+              <Button type="button" variant="outline" onClick={() => setShowMap(true)} disabled={submitting || isCreatingReport}>
+                اختر من الخريطة
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleBrowserLocation()}
+                disabled={detectingLocation || submitting || isCreatingReport}
+              >
+                {detectingLocation ? "جارٍ تحديد الموقع…" : "استخدم موقعي الحالي"}
+              </Button>
+            </div>
+            {locationError && <p className="text-sm text-destructive mt-3" role="alert">{locationError}</p>}
           </Card>
         </div>
 
@@ -172,6 +297,16 @@ function ReportPageContent() {
                     className="h-24 w-24 object-cover rounded-lg mx-auto mb-2"
                   />
                   <p className="text-xs text-muted-foreground">Click to change photo</p>
+                  <button
+                    type="button"
+                    className="mt-2 text-xs font-medium text-destructive"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setUploadedImage(null)
+                    }}
+                  >
+                    Remove photo
+                  </button>
                 </div>
               ) : (
                 <>
@@ -200,24 +335,12 @@ function ReportPageContent() {
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border px-6 py-4">
         <Button
           onClick={handleSubmit}
+          disabled={submitting || isCreatingReport}
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-12 rounded-lg"
         >
-          Submit Report
+          {submitting || isCreatingReport ? "Submitting..." : "Submit Report"}
         </Button>
       </div>
-
-      <DuplicateDetectionModal
-        open={showDuplicateModal}
-        photoUrl={uploadedImage}
-        description={description}
-        issueType={selectedType}
-        lat={21.5433}
-        lng={39.1728}
-        district="Jeddah"
-        onClose={() => setShowDuplicateModal(false)}
-        onConfirmDuplicate={handleUpvoteExisting}
-        onSubmitNew={handleSubmitAsNew}
-      />
     </div>
   )
 }

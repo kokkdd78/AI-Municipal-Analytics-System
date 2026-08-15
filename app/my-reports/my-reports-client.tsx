@@ -4,10 +4,10 @@ import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, MapPin, Calendar, FileText } from "lucide-react"
+import { ArrowLeft, MapPin, Calendar, FileText, RefreshCw } from "lucide-react"
 import StaticMap from "@/components/static-map"
 import { useData } from "@/context/data-context"
-import { formatReportStatus, isReportOwnedByUser } from "@/lib/report-utils"
+import { formatReportStatus } from "@/lib/report-utils"
 import type { ReportStatus } from "@/types/domain"
 import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 
@@ -21,12 +21,7 @@ export default function MyReportsPage() {
 
 function MyReportsContent() {
   const router = useRouter()
-  const { reports: allReports, user } = useData()
-  const reports = user
-    ? allReports
-        .filter((report) => isReportOwnedByUser(report, user))
-        .toSorted((first, second) => second.createdAt.localeCompare(first.createdAt))
-    : []
+  const { myReports: reports, reportLoadState, refreshReports } = useData()
 
   const getStatusBadgeVariant = (status: ReportStatus) => {
     switch (status) {
@@ -56,14 +51,39 @@ function MyReportsContent() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-foreground">My Reports</h1>
-            <p className="text-sm text-muted-foreground">{reports.length} total reports</p>
+            <p className="text-sm text-muted-foreground">
+              {reportLoadState.isLoading ? "Loading reports…" : `${reports.length} total reports`}
+            </p>
           </div>
         </div>
       </div>
 
       {/* Reports List */}
       <div className="px-6 py-6">
-        {reports.length === 0 ? (
+        {reportLoadState.error && reports.length > 0 && (
+          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4" role="alert">
+            <p className="text-sm text-destructive">{reportLoadState.error}</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void refreshReports()}>
+              Retry server reports
+            </Button>
+          </div>
+        )}
+        {reportLoadState.isLoading ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center" role="status">
+            <RefreshCw className="h-10 w-10 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Loading your reports…</p>
+          </div>
+        ) : reportLoadState.error && reports.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center" role="alert">
+            <FileText className="h-12 w-12 text-destructive mb-4" />
+            <h2 className="text-xl font-semibold text-foreground mb-2">Unable to load reports</h2>
+            <p className="text-muted-foreground mb-6 max-w-sm">{reportLoadState.error}</p>
+            <Button onClick={() => void refreshReports()} disabled={reportLoadState.isRefreshing}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${reportLoadState.isRefreshing ? "animate-spin" : ""}`} />
+              Retry
+            </Button>
+          </div>
+        ) : reports.length === 0 ? (
           // Empty state
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="bg-muted rounded-full p-6 mb-4">
@@ -109,6 +129,10 @@ function MyReportsContent() {
 
                       {report.description && (
                         <p className="text-sm text-muted-foreground line-clamp-1 mb-2">{report.description}</p>
+                      )}
+
+                      {report.source === "legacy" && (
+                        <Badge variant="outline" className="mb-2 text-[10px]">Stored on this device</Badge>
                       )}
 
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">

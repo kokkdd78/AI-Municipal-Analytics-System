@@ -89,6 +89,7 @@ export function createReportService(
 
     async listReports(user, query) {
       const result = await repository.listReports({
+        viewerId: user.id,
         ...(query.scope === "mine" ? { authorId: user.id } : {}),
         ...(query.cursor ? { cursor: query.cursor } : {}),
         take: query.limit + 1,

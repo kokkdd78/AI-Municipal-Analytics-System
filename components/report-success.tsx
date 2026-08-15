@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2 } from "lucide-react"
+import { CheckCircle2, RefreshCw } from "lucide-react"
 import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
+import { getReportDetail, ReportClientError, reportClientErrorMessage } from "@/lib/reports/client"
 
 interface ReportSuccessProps {
   reportId?: string
@@ -21,22 +22,83 @@ export default function ReportSuccess({ reportId: propReportId }: ReportSuccessP
 function ReportSuccessContent({ reportId: propReportId }: ReportSuccessProps) {
   const router = useRouter()
   const reportId = propReportId
+  const [verifiedReportId, setVerifiedReportId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     if (!reportId) return
 
-    // Auto-redirect after 2 seconds
+    const controller = new AbortController()
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      setLoading(true)
+      setVerifiedReportId(null)
+      setError(null)
+      void getReportDetail(reportId, { signal: controller.signal })
+        .then(() => {
+          if (!controller.signal.aborted) setVerifiedReportId(reportId)
+        })
+        .catch((requestError) => {
+          if (!(requestError instanceof ReportClientError && requestError.kind === "aborted")) {
+            setError(reportClientErrorMessage(requestError))
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false)
+        })
+    })
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [reportId, retry])
+
+  const verified = Boolean(reportId && verifiedReportId === reportId)
+
+  useEffect(() => {
+    if (!reportId || !verified) return
+
     const timer = setTimeout(() => {
       router.push(`/report/track/${reportId}`)
     }, 2000)
 
     return () => clearTimeout(timer)
-  }, [reportId, router])
+  }, [reportId, router, verified])
 
   const handleViewNow = () => {
-    if (reportId) {
+    if (reportId && verified) {
       router.push(`/report/track/${reportId}`)
     }
+  }
+
+  if (!reportId) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6 text-center" role="alert">
+        <p className="mb-4 text-destructive">The submitted report ID is missing.</p>
+        <Button onClick={() => router.replace("/citizen-app")}>Return home</Button>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6" role="status">
+        <RefreshCw className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">Confirming your submitted report…</p>
+      </div>
+    )
+  }
+
+  if (error || !verified) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6 text-center" role="alert">
+        <p className="mb-4 text-destructive">{error ?? "The report could not be confirmed."}</p>
+        <Button onClick={() => setRetry((value) => value + 1)}>Retry</Button>
+      </div>
+    )
   }
 
   return (

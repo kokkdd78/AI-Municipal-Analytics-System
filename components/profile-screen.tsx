@@ -15,13 +15,12 @@ import { Label } from "@/components/ui/label"
 import { JEDDAH_DISTRICTS } from "@/constants/districts"
 import type { MunicipalUser } from "@/types/domain"
 import { useRouter } from "next/navigation"
-import { isReportOwnedByUser } from "@/lib/report-utils"
 import { municipalAuthFailureMessage } from "@/lib/auth/client"
 
 export default function ProfileScreen({ onNavigate }: { onNavigate: (tab: string) => void }) {
   const { signOut } = useAuth()
   const router = useRouter()
-  const { user, reports, votedReports, suggestions, votedSuggestions, updateUser } = useData()
+  const { user, myReports, votedReports, suggestions, votedSuggestions, updateUser } = useData()
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
@@ -43,7 +42,7 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (tab: string
   }
 
   // Calculate stats
-  const myReportsCount = reports.filter((report) => isReportOwnedByUser(report, user)).length
+  const myReportsCount = myReports.length
 
   const suggestionsMade = suggestions.length
   const totalInteractions = votedReports.size + votedSuggestions.size + suggestionsMade

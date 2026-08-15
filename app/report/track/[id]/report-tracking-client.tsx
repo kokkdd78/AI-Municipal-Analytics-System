@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,24 +9,18 @@ import { useRouter } from "next/navigation"
 import { useData } from "@/context/data-context"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import dynamic from "next/dynamic"
-import { reportStatusStep } from "@/lib/report-utils"
 import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
+import { getReportStatus, ReportClientError, reportClientErrorMessage } from "@/lib/reports/client"
+import { legacyReportTrackingView } from "@/lib/reports/client-state"
+import type { ReportStatusDto } from "@/lib/reports/dto"
+import { useAuth } from "@/context/auth-context"
 
 const MapComponent = dynamic(() => import("@/components/map-component"), {
   ssr: false,
   loading: () => <div className="h-full w-full bg-muted animate-pulse" />,
 })
 
-interface ReportTrackingView {
-  id: string
-  type: string
-  createdAt: string
-  district: string
-  severity: string
-  location: { lat: number; lng: number }
-  currentStatus: number
-  timeline: { time: string; text: string }[]
-}
+type ReportTrackingView = ReportStatusDto & { locallyStored?: true }
 
 export default function ReportTrackingPage() {
   return (
@@ -39,55 +33,68 @@ export default function ReportTrackingPage() {
 function ReportTrackingContent() {
   const params = useParams()
   const router = useRouter()
-  const { reports } = useData()
-  const reportId = params.id as string
-  const [report, setReport] = useState<ReportTrackingView | null>(null)
+  const { user: authenticatedUser } = useAuth()
+  const { reports, myReports, legacyReports, reportLoadState } = useData()
+  const reportId = typeof params.id === "string" ? params.id : ""
+  const trackingSubject = `${authenticatedUser?.id ?? "anonymous"}:${reportId}`
+  const [serverTrackingState, setServerTrackingState] = useState<{
+    subject: string | null
+    report: ReportTrackingView | null
+  }>({ subject: null, report: null })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
   const [isMapOpen, setIsMapOpen] = useState(false)
+  const requestSequenceRef = useRef(0)
+  const legacyReport = legacyReports.find((candidate) => candidate.id === reportId)
+  const serverReport = [...reports, ...myReports].find(
+    (candidate) => candidate.id === reportId && candidate.source === "server",
+  )
+  const localReport = useMemo(
+    () => legacyReport && !serverReport ? legacyReportTrackingView(legacyReport) : null,
+    [legacyReport, serverReport],
+  )
 
   useEffect(() => {
-    const fetchReportStatus = async () => {
-      try {
-        const actualReport = reports.find((r) => r.id === reportId)
-
-        if (actualReport) {
-          const reportStatus: ReportTrackingView = {
-            id: actualReport.id,
-            type: actualReport.title,
-            createdAt: actualReport.createdAt,
-            district: actualReport.district,
-            severity: actualReport.severity ? `${actualReport.severity.charAt(0).toUpperCase()}${actualReport.severity.slice(1)}` : "Medium",
-            location: actualReport.location,
-            currentStatus: reportStatusStep(actualReport.status),
-            timeline: [
-              {
-                time: new Date(actualReport.createdAt).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }),
-                text: "Report submitted",
-              },
-            ],
+    if (!reportId || reportLoadState.isLoading || localReport) return
+    const requestSequence = ++requestSequenceRef.current
+    const controller = new AbortController()
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      setLoading(true)
+      setError(null)
+      void getReportStatus(reportId, { signal: controller.signal })
+        .then((status) => {
+          if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) {
+            setServerTrackingState({ subject: trackingSubject, report: status })
           }
-          setReport(reportStatus)
-        } else {
-          const response = await fetch(`/api/report-status/${reportId}`)
-          if (response.ok) {
-            const data = (await response.json()) as ReportTrackingView
-            setReport(data)
+        })
+        .catch((requestError) => {
+          if (
+            !controller.signal.aborted
+            && requestSequence === requestSequenceRef.current
+            && !(requestError instanceof ReportClientError && requestError.kind === "aborted")
+          ) {
+            setServerTrackingState({ subject: trackingSubject, report: null })
+            setError(reportClientErrorMessage(requestError))
           }
-        }
-      } catch (error) {
-        console.error("Error fetching report:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) setLoading(false)
+        })
+    })
 
-    if (reportId) {
-      fetchReportStatus()
+    return () => {
+      active = false
+      controller.abort()
     }
-  }, [reportId, reports])
+  }, [localReport, reportId, reportLoadState.isLoading, retry, trackingSubject])
+
+  const currentServerTrackingReport = serverTrackingState.subject === trackingSubject
+    ? serverTrackingState.report
+    : null
+  const displayedReport = reportLoadState.isLoading ? null : localReport ?? currentServerTrackingReport
 
   const statusSteps = [
     { label: "Report received", icon: "📥" },
@@ -96,7 +103,10 @@ function ReportTrackingContent() {
     { label: "Resolved", icon: "✅" },
   ]
 
-  if (loading) {
+  if (
+    reportLoadState.isLoading
+    || (!localReport && (loading || serverTrackingState.subject !== trackingSubject))
+  ) {
     return (
       <div className="min-h-screen bg-background p-4 flex items-center justify-center">
         <div className="text-center">
@@ -107,7 +117,7 @@ function ReportTrackingContent() {
     )
   }
 
-  if (!report) {
+  if (error || !displayedReport) {
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-2xl mx-auto">
@@ -115,12 +125,15 @@ function ReportTrackingContent() {
             <ArrowLeft className="h-4 w-4 mr-2" /> Back to Home
           </Button>
           <Card className="p-8 text-center">
-            <p className="text-muted-foreground">Report not found</p>
+            <p className="text-muted-foreground" role="alert">{error ?? "Report not found"}</p>
+            {error && <Button className="mt-4" onClick={() => setRetry((value) => value + 1)}>Retry</Button>}
           </Card>
         </div>
       </div>
     )
   }
+
+  const report = displayedReport
 
   const formattedDate = new Date(report.createdAt).toLocaleDateString("en-US", {
     month: "short",
@@ -129,10 +142,9 @@ function ReportTrackingContent() {
   })
 
   const formatTimelineTime = (timeString: string) => {
-    if (timeString.includes(":")) {
-      return timeString
-    }
-    return new Date(timeString).toLocaleTimeString([], {
+    const date = new Date(timeString)
+    if (Number.isNaN(date.getTime())) return timeString
+    return date.toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     })
@@ -156,6 +168,12 @@ function ReportTrackingContent() {
             <Home className="h-4 w-4" />
           </Button>
         </div>
+
+        {report.locallyStored && (
+          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="note">
+            This is locally stored compatibility data. Its timeline is available only on this device.
+          </div>
+        )}
 
         <Card className="p-6 mb-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">

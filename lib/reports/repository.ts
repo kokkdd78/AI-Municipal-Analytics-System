@@ -21,6 +21,7 @@ export interface ReportProjectionRecord {
   updatedAt: Date
   district: { id: string; name: string }
   voteCount: number
+  viewerHasVoted: boolean
 }
 
 export interface ReportHistoryRecord {
@@ -44,7 +45,6 @@ export interface WorkOrderProgressRecord {
 }
 
 export interface ReportDetailRecord extends ReportProjectionRecord {
-  viewerHasVoted: boolean
   statusHistory: ReportHistoryRecord[]
   workOrders: WorkOrderProgressRecord[]
 }
@@ -66,6 +66,7 @@ export interface ListReportsInput {
   authorId?: string
   cursor?: string
   take: number
+  viewerId: string
 }
 
 export interface ListReportsRecordResult {
@@ -98,12 +99,19 @@ const reportProjectionSelect = {
   _count: { select: { votes: true } },
 } as const
 
-type ProjectionQueryRecord = Omit<ReportProjectionRecord, "voteCount">
-  & { _count: { votes: number } }
+type ProjectionQueryRecord = Omit<ReportProjectionRecord, "voteCount" | "viewerHasVoted">
+  & { _count: { votes: number }; votes: { id: string }[] }
 
 function projection(record: ProjectionQueryRecord): ReportProjectionRecord {
-  const { _count, ...report } = record
-  return { ...report, voteCount: _count.votes }
+  const { _count, votes, ...report } = record
+  return { ...report, voteCount: _count.votes, viewerHasVoted: votes.length > 0 }
+}
+
+function projectionSelectForViewer(viewerId: string) {
+  return {
+    ...reportProjectionSelect,
+    votes: { where: { userId: viewerId }, select: { id: true }, take: 1 },
+  } as const
 }
 
 export function createPrismaReportRepository(database: PrismaClient): ReportRepository {
@@ -128,7 +136,7 @@ export function createPrismaReportRepository(database: PrismaClient): ReportRepo
             longitude: input.longitude,
             importedVoteBaseline: 0,
           },
-          select: reportProjectionSelect,
+          select: projectionSelectForViewer(input.authorId),
         })
         const history = await transaction.statusHistory.create({
           data: {
@@ -150,7 +158,6 @@ export function createPrismaReportRepository(database: PrismaClient): ReportRepo
 
         return {
           ...projection(created),
-          viewerHasVoted: false,
           statusHistory: [history],
           workOrders: [],
         }
@@ -169,7 +176,7 @@ export function createPrismaReportRepository(database: PrismaClient): ReportRepo
 
       const records = await database.report.findMany({
         where,
-        select: reportProjectionSelect,
+        select: projectionSelectForViewer(input.viewerId),
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: input.take,
         ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
@@ -182,8 +189,7 @@ export function createPrismaReportRepository(database: PrismaClient): ReportRepo
       const record = await database.report.findUnique({
         where: { id },
         select: {
-          ...reportProjectionSelect,
-          votes: { where: { userId: viewerId }, select: { id: true }, take: 1 },
+          ...projectionSelectForViewer(viewerId),
           statusHistory: {
             orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             select: {
