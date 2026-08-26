@@ -1,300 +1,34 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import Link from "next/link"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { Bar, BarChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Archive, LogOut, RefreshCw, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 import { useAuth } from "@/context/auth-context"
-import { Archive, LogOut, Map, FileText, PenTool, AlertCircle, MapPin, Truck, ChevronDown } from "lucide-react"
-import WorkOrdersScreen from "./work-orders-screen"
-import UrbanPlanningScreen from "./urban-planning-screen"
-import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
 import { municipalAuthFailureMessage } from "@/lib/auth/client"
 
-interface IssuePin {
-  id: number
-  lat: number
-  lng: number
-  title: string
-  status: "Critical" | "Warning"
+const MapComponent = dynamic(() => import("@/components/map-component"), { ssr: false })
+type Report = { id: string; title: string; description: string; category: string; status: string; district: { id: string; name: string }; location: { lat: number; lng: number }; createdAt: string; votes: number; workOrderCount: number }
+type WorkOrder = { id: string; title: string; description: string; priority: string; status: string; report: Report; crew: { id: string; name: string }[]; evidence: { id: string; name: string; url: string }[]; history: { note: string | null }[] }
+type Dashboard = { cards: Record<string, number>; statusChart: { name: string; value: number }[]; categoryChart: { name: string; value: number }[]; reports: Report[]; mapReports: Report[]; districts: { id: string; name: string }[]; categories: string[]; total: number; page: number; totalPages: number }
+const title = (value: string) => value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+async function api<T>(url: string, init?: RequestInit): Promise<T> { const response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...init, headers: { ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers } }); if (!response.ok) throw new Error("request"); return response.json() as Promise<T> }
+
+export default function ManagerDashboard() { return <AuthenticatedRoleBoundary role="Manager"><DashboardContent /></AuthenticatedRoleBoundary> }
+function DashboardContent() {
+  const router = useRouter(); const { user, signOut } = useAuth(); const [tab, setTab] = useState<"dashboard" | "orders">("dashboard"); const [data, setData] = useState<Dashboard | null>(null); const [orders, setOrders] = useState<WorkOrder[]>([]); const [crews, setCrews] = useState<{ id: string; name: string }[]>([]); const [reports, setReports] = useState<Report[]>([]); const [error, setError] = useState(""); const [loading, setLoading] = useState(true); const [filters, setFilters] = useState({ from: "", to: "", district: "", category: "", status: "", page: 1 }); const [form, setForm] = useState({ reportId: "", title: "", description: "", priority: "medium", crewIds: [] as string[] })
+  const query = useMemo(() => new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== "" && v !== 1).map(([k, v]) => [k, String(v)])).toString(), [filters])
+  const load = useCallback(async () => { setLoading(true); setError(""); try { if (tab === "dashboard") setData(await api<Dashboard>(`/api/manager/dashboard?${query}`)); else { const result = await api<{ workOrders: WorkOrder[]; crews: { id: string; name: string }[]; reports: Report[] }>("/api/manager/work-orders"); setOrders(result.workOrders); setCrews(result.crews); setReports(result.reports) } } catch { setError("Live municipal data is unavailable. Please retry.") } finally { setLoading(false) } }, [query, tab])
+  useEffect(() => { const timer = window.setTimeout(() => { void load() }, 0); return () => window.clearTimeout(timer) }, [load])
+  const create = async (event: React.FormEvent) => { event.preventDefault(); try { await api("/api/manager/work-orders", { method: "POST", body: JSON.stringify(form) }); setForm({ reportId: "", title: "", description: "", priority: "medium", crewIds: [] }); await load() } catch { setError("Unable to create and assign this work order.") } }
+  const patch = async (id: string, body: unknown) => { try { await api(`/api/manager/work-orders/${id}`, { method: "PATCH", body: JSON.stringify(body) }); await load() } catch { setError("Unable to update the work order.") } }
+  const close = async (id: string) => { try { await api(`/api/manager/reports/${id}/close`, { method: "POST", body: "{}" }); await load() } catch { setError("A completed work order is required before final closure.") } }
+  return <div className="min-h-screen bg-slate-50"><aside className="fixed inset-y-0 left-0 z-10 flex w-64 flex-col bg-slate-900 text-white"><div className="border-b border-slate-800 p-6 font-bold">Operations Center</div><nav className="flex-1 space-y-2 p-4"><button className={`w-full rounded p-3 text-left ${tab === "dashboard" ? "bg-blue-600" : "hover:bg-slate-800"}`} onClick={() => setTab("dashboard")}>Dashboard</button><button className={`w-full rounded p-3 text-left ${tab === "orders" ? "bg-blue-600" : "hover:bg-slate-800"}`} onClick={() => setTab("orders")}><Truck className="mr-2 inline" size={16}/>Work Orders</button><Link className="block rounded p-3 hover:bg-slate-800" href="/manager/archive"><Archive className="mr-2 inline" size={16}/>ECM Archive</Link></nav><div className="border-t border-slate-800 p-4 text-sm"><p className="mb-3">{user?.name ?? "Manager"}</p><Button className="w-full" variant="outline" onClick={async () => { const result = await signOut(); if (result.ok) { router.replace("/auth"); router.refresh() } else setError(municipalAuthFailureMessage(result)) }}><LogOut size={16}/>Logout</Button></div></aside><main className="ml-64 p-6"><div className="mb-6 flex justify-between"><div><h1 className="text-3xl font-bold">{tab === "dashboard" ? "Municipal Operations" : "Work Orders"}</h1><p className="text-slate-500">Live PostgreSQL records</p></div><Button variant="outline" onClick={() => void load()}><RefreshCw size={16}/>Refresh</Button></div>{error && <p role="alert" className="mb-4 rounded bg-red-50 p-3 text-red-700">{error}</p>}{tab === "dashboard" ? <DashboardView data={data} loading={loading} filters={filters} setFilters={setFilters}/> : <OrdersView orders={orders} crews={crews} reports={reports} loading={loading} form={form} setForm={setForm} onCreate={create} onPatch={patch} onClose={close}/>}</main></div>
 }
-
-export default function ManagerDashboard() {
-  return (
-    <AuthenticatedRoleBoundary role="Manager">
-      <ManagerDashboardContent />
-    </AuthenticatedRoleBoundary>
-  )
-}
-
-function ManagerDashboardContent() {
-  const router = useRouter()
-  const { signOut, user } = useAuth()
-  const [activeMenu, setActiveMenu] = useState("Operations")
-  const [showAlerts, setShowAlerts] = useState(true)
-  const [mapLayer, setMapLayer] = useState("Show All")
-  const [selectedPin, setSelectedPin] = useState<IssuePin | null>(null)
-  const [isSigningOut, setIsSigningOut] = useState(false)
-  const [logoutError, setLogoutError] = useState<string | null>(null)
-
-  const handleSignOut = async () => {
-    if (isSigningOut) return
-    setIsSigningOut(true)
-    setLogoutError(null)
-    const result = await signOut()
-    if (!result.ok) {
-      setLogoutError(municipalAuthFailureMessage(result))
-      setIsSigningOut(false)
-      return
-    }
-    router.replace("/auth")
-    router.refresh()
-  }
-
-  // Mock map pins data
-  const issuePins: IssuePin[] = [
-    { id: 1, lat: 51.2, lng: 4.4, title: "Pothole on Main St", status: "Critical" },
-    { id: 2, lat: 51.22, lng: 4.42, title: "Broken Streetlight", status: "Warning" },
-    { id: 3, lat: 51.18, lng: 4.38, title: "Graffiti on Bridge", status: "Warning" },
-  ]
-
-  const crewPins = [
-    { id: 1, lat: 51.21, lng: 4.39, name: "Crew A" },
-    { id: 2, lat: 51.19, lng: 4.41, name: "Crew B" },
-    { id: 3, lat: 51.23, lng: 4.43, name: "Crew C" },
-  ]
-
-  const alerts = [
-    { id: 1, severity: "Critical", message: "Sinkhole on King Rd", time: "2m ago" },
-    { id: 2, severity: "Warning", message: "Multiple potholes reported", time: "5m ago" },
-    { id: 3, severity: "Critical", message: "Streetlight outage Downtown", time: "8m ago" },
-  ]
-
-  const menuItems = [
-    { label: "Operations", icon: Map },
-    { label: "Work Orders", icon: FileText },
-    { label: "Urban Planning", icon: PenTool },
-  ]
-
-  return (
-    <div className="flex h-screen bg-background">
-      <div className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed left-0 top-0 bottom-0 z-50">
-        <div className="p-6 border-b border-slate-800">
-          <h1 className="text-white font-bold text-lg">Operations Center</h1>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <Link
-            href="/manager/archive"
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-slate-400 hover:bg-slate-800"
-          >
-            <Archive className="h-5 w-5" />
-            <span className="text-sm font-medium">ECM Archive</span>
-          </Link>
-          {menuItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <button
-                key={item.label}
-                onClick={() => setActiveMenu(item.label)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  activeMenu === item.label ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800"
-                }`}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="text-sm font-medium">{item.label}</span>
-              </button>
-            )
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-slate-800 space-y-3">
-          <div className="flex items-center gap-3 px-4 py-3">
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
-              F
-            </div>
-            <span className="text-sm text-white">{user?.name ?? "Manager"} (Manager)</span>
-          </div>
-          <button
-            onClick={handleSignOut}
-            disabled={isSigningOut}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-sm"
-          >
-            <LogOut className="h-4 w-4" />
-            {isSigningOut ? "Signing out..." : "Logout"}
-          </button>
-          {logoutError && <p role="alert" className="px-4 text-xs text-red-300">{logoutError}</p>}
-        </div>
-      </div>
-
-      <div className="flex-1 ml-64 relative overflow-hidden">
-        {activeMenu === "Operations" && (
-          <>
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-slate-100 overflow-y-auto">
-              {/* Map Container */}
-              <div className="w-full h-full relative bg-gradient-to-br from-blue-100 to-blue-50 border-2 border-blue-200 flex items-center justify-center">
-                <div className="absolute inset-0 opacity-30">
-                  {/* Grid pattern for map */}
-                  <svg className="w-full h-full">
-                    <defs>
-                      <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(100,100,150,0.1)" strokeWidth="0.5" />
-                      </pattern>
-                    </defs>
-                    <rect width="100%" height="100%" fill="url(#grid)" />
-                  </svg>
-                </div>
-
-                {/* Issue Pins */}
-                {(mapLayer === "Show All" || mapLayer === "Reports Only") &&
-                  issuePins.map((pin) => (
-                    <button
-                      key={pin.id}
-                      onClick={() => setSelectedPin(pin)}
-                      className="absolute transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform"
-                      style={{ left: `${pin.lng * 100}%`, top: `${pin.lat * 100}%` }}
-                    >
-                      <div className="relative">
-                        <div
-                          className="absolute inset-0 animate-pulse bg-red-500 rounded-full blur-md opacity-50"
-                          style={{ width: "24px", height: "24px" }}
-                        ></div>
-                        <MapPin className="h-6 w-6 text-red-600 relative z-10" fill="currentColor" />
-                      </div>
-                    </button>
-                  ))}
-
-                {/* Crew Truck Icons */}
-                {(mapLayer === "Show All" || mapLayer === "Crews Only") &&
-                  crewPins.map((pin) => (
-                    <div
-                      key={pin.id}
-                      className="absolute transform -translate-x-1/2 -translate-y-1/2"
-                      style={{ left: `${pin.lng * 100}%`, top: `${pin.lat * 100}%` }}
-                    >
-                      <div className="bg-green-500 rounded-full p-2 shadow-lg">
-                        <Truck className="h-5 w-5 text-white" />
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            <div className="absolute top-6 left-6 z-20">
-              <Card className="bg-white/90 backdrop-blur-sm border border-white shadow-lg p-4 w-72">
-                <h3 className="text-sm font-semibold text-slate-900 mb-4">Live Statistics</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-600">Active Reports</span>
-                    <span className="text-lg font-bold text-red-600">142</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-600">Crews Online</span>
-                    <span className="text-lg font-bold text-green-600">8</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-600">Avg Fix Time</span>
-                    <span className="text-lg font-bold text-blue-600">4.2h</span>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            <div className="absolute top-6 right-6 z-20 w-80">
-              <Card
-                className={`bg-white/90 backdrop-blur-sm border border-white shadow-lg overflow-hidden transition-all ${showAlerts ? "max-h-96" : "max-h-12"}`}
-              >
-                <button
-                  onClick={() => setShowAlerts(!showAlerts)}
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 border-b border-slate-100"
-                >
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 text-orange-500" />
-                    <h3 className="text-sm font-semibold text-slate-900">Incoming Alerts</h3>
-                  </div>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showAlerts ? "rotate-180" : ""}`} />
-                </button>
-
-                {showAlerts && (
-                  <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-                    {alerts.map((alert) => (
-                      <div
-                        key={alert.id}
-                        className={`px-4 py-3 border-l-4 ${
-                          alert.severity === "Critical"
-                            ? "border-l-red-500 bg-red-50/50"
-                            : "border-l-yellow-500 bg-yellow-50/50"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p
-                              className={`text-xs font-semibold ${alert.severity === "Critical" ? "text-red-700" : "text-yellow-700"}`}
-                            >
-                              {alert.severity}
-                            </p>
-                            <p className="text-sm text-slate-900 font-medium mt-1">{alert.message}</p>
-                          </div>
-                          <span className="text-xs text-slate-500 ml-2">{alert.time}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            </div>
-
-            <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20">
-              <Card className="bg-white/90 backdrop-blur-sm border border-white shadow-lg p-2 flex gap-2">
-                {["Show All", "Crews Only", "Reports Only"].map((layer) => (
-                  <button
-                    key={layer}
-                    onClick={() => setMapLayer(layer)}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                      mapLayer === layer
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    }`}
-                  >
-                    {layer}
-                  </button>
-                ))}
-              </Card>
-            </div>
-
-            {selectedPin && (
-              <div className="absolute bottom-6 right-6 z-20">
-                <Card className="bg-white border border-slate-200 shadow-lg p-4 w-80">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase">Issue Details</p>
-                      <h4 className="text-lg font-bold text-slate-900 mt-1">{selectedPin.title}</h4>
-                    </div>
-                    <button onClick={() => setSelectedPin(null)} className="text-slate-400 hover:text-slate-600">
-                      ✕
-                    </button>
-                  </div>
-                  <div className="mb-4">
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                        selectedPin.status === "Critical" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
-                      }`}
-                    >
-                      {selectedPin.status}
-                    </span>
-                  </div>
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">Assign to Crew</Button>
-                </Card>
-              </div>
-            )}
-          </>
-        )}
-
-        {activeMenu === "Work Orders" && <WorkOrdersScreen />}
-
-        {activeMenu === "Urban Planning" && <UrbanPlanningScreen />}
-      </div>
-    </div>
-  )
-}
+function DashboardView({ data, loading, filters, setFilters }: { data: Dashboard | null; loading: boolean; filters: { from: string; to: string; district: string; category: string; status: string; page: number }; setFilters: React.Dispatch<React.SetStateAction<{ from: string; to: string; district: string; category: string; status: string; page: number }>> }) { if (loading && !data) return <p>Loading dashboard…</p>; if (!data) return null; const change = (key: "from" | "to" | "district" | "category" | "status", value: string) => setFilters((v) => ({ ...v, [key]: value, page: 1 })); return <div className="space-y-6"><Card className="grid gap-3 p-4 md:grid-cols-5"><input className="rounded border p-2" type="date" value={filters.from} onChange={(e) => change("from", e.target.value)}/><input className="rounded border p-2" type="date" value={filters.to} onChange={(e) => change("to", e.target.value)}/><select className="rounded border p-2" value={filters.district} onChange={(e) => change("district", e.target.value)}><option value="">All districts</option>{data.districts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select><select className="rounded border p-2" value={filters.category} onChange={(e) => change("category", e.target.value)}><option value="">All categories</option>{data.categories.map((c) => <option key={c}>{c}</option>)}</select><select className="rounded border p-2" value={filters.status} onChange={(e) => change("status", e.target.value)}><option value="">All statuses</option><option value="pending">Pending</option><option value="in-progress">In progress</option><option value="resolved">Resolved</option></select></Card><div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">{Object.entries(data.cards).map(([name, value]) => <Card key={name} className="p-4"><p className="text-xs text-slate-500">{title(name)}</p><p className="text-2xl font-bold">{value}</p></Card>)}</div><div className="grid gap-6 lg:grid-cols-2"><Card className="h-72 p-4"><h2 className="font-semibold">Status</h2><ResponsiveContainer width="100%" height="90%"><PieChart><Pie data={data.statusChart} dataKey="value" nameKey="name" fill="#2563eb"/><Tooltip/></PieChart></ResponsiveContainer></Card><Card className="h-72 p-4"><h2 className="font-semibold">Categories</h2><ResponsiveContainer width="100%" height="90%"><BarChart data={data.categoryChart}><XAxis dataKey="name" hide/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" fill="#2563eb"/></BarChart></ResponsiveContainer></Card></div><Card className="h-96 overflow-hidden"><MapComponent center={{ lat: 21.4858, lng: 39.1925 }} reports={data.mapReports.map((r) => ({ id: r.id, title: r.title, description: r.description, location: r.location, votes: r.votes }))}/></Card><Card className="overflow-x-auto p-4"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Report</th><th>District</th><th>Status</th><th>Category</th><th>Created</th></tr></thead><tbody>{data.reports.map((r) => <tr key={r.id} className="border-b"><td className="p-2 font-medium">{r.title}</td><td>{r.district.name}</td><td>{title(r.status)}</td><td>{r.category}</td><td>{new Date(r.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table><div className="mt-4 flex justify-between"><Button variant="outline" disabled={data.page === 1} onClick={() => setFilters((v) => ({ ...v, page: v.page - 1 }))}>Previous</Button><span className="text-sm">Page {data.page} of {data.totalPages}</span><Button variant="outline" disabled={data.page >= data.totalPages} onClick={() => setFilters((v) => ({ ...v, page: v.page + 1 }))}>Next</Button></div></Card></div> }
+function OrdersView({ orders, crews, reports, loading, form, setForm, onCreate, onPatch, onClose }: { orders: WorkOrder[]; crews: { id: string; name: string }[]; reports: Report[]; loading: boolean; form: { reportId: string; title: string; description: string; priority: string; crewIds: string[] }; setForm: React.Dispatch<React.SetStateAction<{ reportId: string; title: string; description: string; priority: string; crewIds: string[] }>>; onCreate: (event: React.FormEvent) => Promise<void>; onPatch: (id: string, body: unknown) => Promise<void>; onClose: (id: string) => Promise<void> }) { return <div className="grid gap-6 xl:grid-cols-[360px_1fr]"><Card className="h-fit p-4"><h2 className="mb-4 font-bold">Create and assign</h2><form className="space-y-3" onSubmit={(e) => void onCreate(e)}><select required className="w-full rounded border p-2" value={form.reportId} onChange={(e) => setForm((v) => ({ ...v, reportId: e.target.value }))}><option value="">Select report</option>{reports.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}</select><input required className="w-full rounded border p-2" placeholder="Work order title" value={form.title} onChange={(e) => setForm((v) => ({ ...v, title: e.target.value }))}/><textarea required className="w-full rounded border p-2" placeholder="Instructions" value={form.description} onChange={(e) => setForm((v) => ({ ...v, description: e.target.value }))}/><select className="w-full rounded border p-2" value={form.priority} onChange={(e) => setForm((v) => ({ ...v, priority: e.target.value }))}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>{crews.map((c) => <label key={c.id} className="flex gap-2 text-sm"><input type="checkbox" checked={form.crewIds.includes(c.id)} onChange={(e) => setForm((v) => ({ ...v, crewIds: e.target.checked ? [...v.crewIds, c.id] : v.crewIds.filter((id) => id !== c.id) }))}/>{c.name}</label>)}<Button className="w-full" type="submit">Create work order</Button></form></Card><div className="space-y-4">{loading ? <p>Loading work orders…</p> : orders.map((o) => <Card key={o.id} className="p-5"><div className="flex justify-between gap-4"><div><h3 className="font-bold">{o.title}</h3><p className="text-sm text-slate-600">{o.report.title} · {o.report.district.name}</p><p className="mt-2 text-sm">{o.description}</p></div><span>{title(o.status)} · {title(o.priority)}</span></div><p className="mt-3 text-sm"><b>Assigned:</b> {o.crew.map((c) => c.name).join(", ") || "None"}</p><p className="text-sm"><b>Latest note:</b> {o.history.at(-1)?.note ?? "No update"}</p>{o.evidence.length > 0 && <p className="text-sm"><b>Evidence:</b> {o.evidence.map((e) => <a className="ml-2 text-blue-600 underline" key={e.id} href={e.url} target="_blank" rel="noreferrer">{e.name}</a>)}</p>}<div className="mt-4 flex gap-2"><select className="rounded border p-2" value={o.priority} onChange={(e) => void onPatch(o.id, { priority: e.target.value })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select><select className="rounded border p-2" defaultValue="" onChange={(e) => e.target.value && void onPatch(o.id, { crewIds: [e.target.value] })}><option value="">Reassign…</option>{crews.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>{o.status === "completed" && o.report.status !== "resolved" && <Button onClick={() => void onClose(o.report.id)}>Approve closure</Button>}{o.report.status === "resolved" && <Link href="/manager/archive"><Button variant="outline">Archive</Button></Link>}</div></Card>)}</div></div> }

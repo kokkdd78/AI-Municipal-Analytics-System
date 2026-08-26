@@ -9,6 +9,7 @@ import {
 } from "../lib/reports/client-state"
 import {
   createReportFormOperationGate,
+  confirmedMapReportLocation,
   INITIAL_EXPLICIT_REPORT_LOCATION,
   reportDescriptionForSubmission,
   reportRequestForExplicitLocation,
@@ -24,14 +25,6 @@ const mapLocation: ExplicitReportLocation = {
   districtId: "al-naeem",
   districtName: "Al-Naeem",
   source: "map",
-}
-
-const browserLocation: ExplicitReportLocation = {
-  lat: 21.501234,
-  lng: 39.201234,
-  districtId: "al-hamra",
-  districtName: "Al-Hamra",
-  source: "browser",
 }
 
 const createdReport: ReportDetailDto = {
@@ -101,7 +94,7 @@ describe("Phase 3A2 report form operation gate", () => {
     expect(gate.commitNavigation(operation)).toBe(false)
   })
 
-  it("requires an explicit location and submits map or browser coordinates exactly", () => {
+  it("requires one explicit confirmed location and submits its district and coordinates together", () => {
     expect(INITIAL_EXPLICIT_REPORT_LOCATION).toBeNull()
     expect(reportRequestForExplicitLocation(
       "pothole",
@@ -114,12 +107,6 @@ describe("Phase 3A2 report form operation gate", () => {
       districtId: "al-naeem",
       location: { lat: 21.612345, lng: 39.156789 },
     })
-    expect(reportRequestForExplicitLocation("trash", "Overflowing bin", browserLocation)).toEqual({
-      category: "trash",
-      description: "Overflowing bin",
-      districtId: "al-hamra",
-      location: { lat: 21.501234, lng: 39.201234 },
-    })
     expect(reportRequestForExplicitLocation("pothole", "Road damage", {
       ...mapLocation,
       lat: Number.NaN,
@@ -128,6 +115,20 @@ describe("Phase 3A2 report form operation gate", () => {
       ...mapLocation,
       lng: 181,
     })).toBeNull()
+  })
+
+  it("creates a canonical map location atomically and never uses a profile district fallback", () => {
+    const selected = confirmedMapReportLocation(21.612345, 39.156789, "Al-Naeem")
+    expect(selected).toEqual(mapLocation)
+    expect(reportRequestForExplicitLocation("pothole", "Road damage", selected)).toMatchObject({
+      districtId: "al-naeem",
+      location: { lat: 21.612345, lng: 39.156789 },
+    })
+
+    // A reverse-geocoding value outside the configured canonical districts is not
+    // replaced by account/profile information and cannot become a report request.
+    expect(confirmedMapReportLocation(21.5433, 39.1728, "Unknown Location")).toBeNull()
+    expect(reportRequestForExplicitLocation("pothole", "Road damage", null)).toBeNull()
   })
 
   it("does not produce submission coordinates when browser geolocation is denied or invalid", async () => {
@@ -152,26 +153,21 @@ describe("Phase 3A2 report form operation gate", () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it("uses successful browser coordinates exactly without a fixed fallback", async () => {
+  it("requires browser coordinates to be confirmed by the map instead of assigning a profile district", async () => {
     const geolocation = {
       getCurrentPosition: (success: PositionCallback) => success({
-        coords: { latitude: browserLocation.lat, longitude: browserLocation.lng },
+      coords: { latitude: 21.501234, longitude: 39.201234 },
       } as GeolocationPosition),
     }
     const coordinates = await requestBrowserReportCoordinates(geolocation)
     expect(coordinates).toEqual({
-      lat: browserLocation.lat,
-      lng: browserLocation.lng,
+      lat: 21.501234,
+      lng: 39.201234,
     })
-    expect(reportRequestForExplicitLocation("trash", "Overflowing bin", {
-      ...browserLocation,
-      ...coordinates,
-    })).toEqual({
-      category: "trash",
-      description: "Overflowing bin",
-      districtId: "al-hamra",
-      location: coordinates,
-    })
+    // GPS returns coordinates only. It has no district or profile input, so it
+    // cannot be submitted until the map has resolved a canonical district.
+    expect(reportRequestForExplicitLocation("trash", "Overflowing bin", null)).toBeNull()
+    expect(confirmedMapReportLocation(coordinates.lat, coordinates.lng, "Unknown Location")).toBeNull()
   })
 
   it("unlocks the form gate after a real retryable request failure", async () => {

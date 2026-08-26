@@ -1,4 +1,9 @@
 import type { CreateReportRequest } from "./contracts"
+import {
+  findDistrictByName,
+  findDistrictFromNominatimAddress,
+  type NominatimDistrictAddress,
+} from "../../constants/districts"
 
 export interface ReportFormOperationToken {
   readonly id: number
@@ -106,10 +111,45 @@ export interface ExplicitReportLocation {
   lng: number
   districtId: string
   districtName: string
-  source: "browser" | "map"
+  source: "map"
 }
 
 export const INITIAL_EXPLICIT_REPORT_LOCATION: ExplicitReportLocation | null = null
+
+/**
+ * Produces the only location shape that may be submitted by the citizen forms.
+ * The canonical district and coordinates are deliberately derived from the same
+ * confirmed map selection; account-profile metadata is not an input here.
+ */
+export function confirmedMapReportLocation(
+  lat: number,
+  lng: number,
+  reverseGeocodedDistrict: string,
+  canonicalDistrictId?: string,
+): ExplicitReportLocation | null {
+  const coordinates = { lat, lng }
+  const district = findDistrictByName(canonicalDistrictId ?? reverseGeocodedDistrict)
+  if (canonicalDistrictId && district?.name !== reverseGeocodedDistrict) return null
+  if (!hasValidReportCoordinates(coordinates) || !district) return null
+
+  return {
+    ...coordinates,
+    districtId: district.id,
+    districtName: district.name,
+    source: "map",
+  }
+}
+
+export function confirmedNominatimMapReportLocation(
+  lat: number,
+  lng: number,
+  address: NominatimDistrictAddress,
+): ExplicitReportLocation | null {
+  const district = findDistrictFromNominatimAddress(address)
+  return district
+    ? confirmedMapReportLocation(lat, lng, district.name, district.id)
+    : null
+}
 
 export function hasValidReportCoordinates(
   location: Pick<ExplicitReportLocation, "lat" | "lng"> | null,

@@ -78,6 +78,7 @@ export const JEDDAH_DISTRICTS: District[] = [
   { id: "briman", name: "Briman", arabic: "بريمان" },
   { id: "al-hamdaniyah", name: "Al-Hamdaniyah", arabic: "الحمدانية" },
   { id: "al-sharafieh", name: "Al-Sharafieh", arabic: "الشرفية" },
+  { id: "al-marwah", name: "Al-Marwah", arabic: "المروة" },
   { id: "al-morooj", name: "Al-Morooj", arabic: "المروج" },
   { id: "al-tawfiq", name: "Al-Tawfiq", arabic: "التوفيق" },
   { id: "al-mahjar", name: "Al-Mahjar", arabic: "المحجر" },
@@ -108,9 +109,117 @@ export const JEDDAH_DISTRICTS: District[] = [
   { id: "umm-as-salam", name: "Umm As-Salam", arabic: "أم السلم" },
 ]
 
-// Helper function to find district by name (for backward compatibility)
+const DISTRICT_ADDRESS_FIELDS = [
+  "neighbourhood",
+  "suburb",
+  "quarter",
+  "residential",
+  "city_district",
+] as const
+
+export type NominatimDistrictAddress = Partial<Record<(typeof DISTRICT_ADDRESS_FIELDS)[number], unknown>>
+
+function normalizeArabicDistrictName(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/[ىی]/g, "ي")
+    .replace(/ک/g, "ك")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/^\s*ح[يى]\s+/u, "")
+    .replace(/[^\p{L}\p{N}]/gu, "")
+    .replace(/^ال/u, "")
+}
+
+function normalizeLatinDistrictName(value: string): string {
+  const tokens = value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\b(?:district|neighbou?rhood|quarter)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => ["al", "el", "ash", "as", "ar"].includes(token) ? "al" : token)
+
+  return tokens.join("")
+}
+
+export function normalizeDistrictName(value: string): string {
+  const normalized = value.trim()
+  if (!normalized) return ""
+  return /\p{Script=Arabic}/u.test(normalized)
+    ? normalizeArabicDistrictName(normalized)
+    : normalizeLatinDistrictName(normalized)
+}
+
+type DistrictAliasIndex = Map<string, District | null>
+
+function addDistrictAlias(index: DistrictAliasIndex, alias: string, district: District): void {
+  if (!alias) return
+  if (!index.has(alias)) {
+    index.set(alias, district)
+    return
+  }
+  const existing = index.get(alias)
+  if (!existing) return
+  if (existing.id !== district.id) index.set(alias, null)
+}
+
+function buildConfiguredDistrictAliasIndex(): DistrictAliasIndex {
+  const index: DistrictAliasIndex = new Map()
+  for (const district of JEDDAH_DISTRICTS) {
+    addDistrictAlias(index, normalizeDistrictName(district.id), district)
+    addDistrictAlias(index, normalizeDistrictName(district.name), district)
+    addDistrictAlias(index, normalizeDistrictName(district.arabic), district)
+  }
+  return index
+}
+
+function normalizeEnglishSpellingVariant(value: string): string {
+  return normalizeLatinDistrictName(value)
+    .replace(/iyah$|iya$|ieh$|ia$/u, "iya")
+    .replace(/ah$/u, "a")
+    .replace(/aa$/u, "a")
+}
+
+function buildEnglishSpellingAliasIndex(): DistrictAliasIndex {
+  const index: DistrictAliasIndex = new Map()
+  for (const district of JEDDAH_DISTRICTS) {
+    addDistrictAlias(index, normalizeEnglishSpellingVariant(district.id), district)
+    addDistrictAlias(index, normalizeEnglishSpellingVariant(district.name), district)
+  }
+  return index
+}
+
+const CONFIGURED_DISTRICT_ALIAS_INDEX = buildConfiguredDistrictAliasIndex()
+const ENGLISH_SPELLING_ALIAS_INDEX = buildEnglishSpellingAliasIndex()
+
+// Resolve a configured district without accepting fuzzy or out-of-list values.
 export function findDistrictByName(name: string): District | undefined {
-  return JEDDAH_DISTRICTS.find((d) => d.name === name || d.id === name)
+  const exact = JEDDAH_DISTRICTS.find((district) => district.name === name || district.id === name)
+  if (exact) return exact
+
+  const normalized = normalizeDistrictName(name)
+  const configuredMatch = CONFIGURED_DISTRICT_ALIAS_INDEX.get(normalized)
+  if (configuredMatch) return configuredMatch
+  if (/\p{Script=Arabic}/u.test(name)) return undefined
+
+  return ENGLISH_SPELLING_ALIAS_INDEX.get(normalizeEnglishSpellingVariant(name)) ?? undefined
+}
+
+export function findDistrictFromNominatimAddress(address: NominatimDistrictAddress): District | undefined {
+  for (const field of DISTRICT_ADDRESS_FIELDS) {
+    const value = address[field]
+    if (typeof value !== "string") continue
+    const district = findDistrictByName(value)
+    if (district) return district
+  }
+  return undefined
 }
 
 // Helper function to find district by id

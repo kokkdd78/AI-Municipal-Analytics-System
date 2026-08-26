@@ -11,14 +11,12 @@ import { useToast } from "@/hooks/use-toast"
 import { X, MapPin, Trash2, Lightbulb, AlertCircle, Camera } from "lucide-react"
 import Image from "next/image"
 import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
-import { useAuth } from "@/context/auth-context"
 import { useData } from "@/context/data-context"
 import { ReportClientError, reportClientErrorMessage } from "@/lib/reports/client"
 import { MAX_REPORT_IMAGE_BYTES, REPORT_IMAGE_MIME_TYPES } from "@/lib/report-images/contracts"
-import { findDistrictByName } from "@/constants/districts"
 import {
+  confirmedMapReportLocation,
   createReportFormOperationGate,
-  hasValidReportCoordinates,
   INITIAL_EXPLICIT_REPORT_LOCATION,
   requestBrowserReportCoordinates,
   reportRequestForExplicitLocation,
@@ -39,7 +37,6 @@ export default function ReportPage() {
 function ReportPageContent() {
   const { toast } = useToast()
   const router = useRouter()
-  const { user } = useAuth()
   const { createReport, uploadReportImage, isCreatingReport } = useData()
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [description, setDescription] = useState("")
@@ -52,6 +49,7 @@ function ReportPageContent() {
     INITIAL_EXPLICIT_REPORT_LOCATION,
   )
   const [showMap, setShowMap] = useState(false)
+  const [mapInitialCenter, setMapInitialCenter] = useState<[number, number] | undefined>()
   const [detectingLocation, setDetectingLocation] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
   const operationGateRef = useRef(createReportFormOperationGate())
@@ -116,14 +114,14 @@ function ReportPageContent() {
     router.push("/citizen-app")
   }
 
-  const handleMapLocation = (lat: number, lng: number, districtName: string) => {
-    const coordinates = { lat, lng }
-    const district = findDistrictByName(districtName)
-    if (!hasValidReportCoordinates(coordinates) || !district) {
+  const handleMapLocation = (lat: number, lng: number, districtName: string, districtId: string) => {
+    const location = confirmedMapReportLocation(lat, lng, districtName, districtId)
+    if (!location) {
       setLocationError("تعذر تأكيد الحي لهذا الموقع. اختر نقطة داخل حي مدعوم في جدة.")
       return
     }
-    setSelectedLocation({ ...coordinates, districtId: district.id, districtName: district.name, source: "map" })
+    setSelectedLocation(location)
+    setMapInitialCenter(undefined)
     setLocationError(null)
     setShowMap(false)
   }
@@ -136,16 +134,9 @@ function ReportPageContent() {
     try {
       const coordinates = await requestBrowserReportCoordinates(navigator.geolocation)
       if (!mountedRef.current) return
-      if (!user?.district) {
-        setLocationError("تعذر تأكيد حي البلاغ من الحساب. اختر الموقع والحي من الخريطة.")
-        return
-      }
-      setSelectedLocation({
-        ...coordinates,
-        districtId: user.district.id,
-        districtName: user.district.name,
-        source: "browser",
-      })
+      setMapInitialCenter([coordinates.lat, coordinates.lng])
+      setShowMap(true)
+      setLocationError("أكد موقعك والحي من الخريطة قبل إرسال البلاغ.")
     } catch {
       if (mountedRef.current) {
         setLocationError("تعذر تحديد موقعك. لم يتم استخدام أي موقع افتراضي؛ اختر الموقع من الخريطة.")
@@ -215,8 +206,9 @@ function ReportPageContent() {
     <div className="h-screen bg-background flex flex-col pb-8">
       {showMap && (
         <MapSelectorModal
-          onClose={() => setShowMap(false)}
+          onClose={() => { setShowMap(false); setMapInitialCenter(undefined) }}
           onSelect={handleMapLocation}
+          initialCenter={mapInitialCenter}
         />
       )}
       {/* Header */}
@@ -249,9 +241,7 @@ function ReportPageContent() {
                       {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {selectedLocation.source === "browser"
-                        ? "الحي المعتمد من حسابك؛ الإحداثيات من موقع المتصفح."
-                        : "تم تأكيد الإحداثيات والحي من اختيار الخريطة."}
+                      تم تأكيد الإحداثيات والحي من اختيار الخريطة.
                     </p>
                   </>
                 ) : (

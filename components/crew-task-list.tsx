@@ -1,140 +1,22 @@
 "use client"
-
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { CheckCircle2, Clock, LogOut, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import AuthenticatedRoleBoundary from "@/components/authenticated-role-boundary"
 import { useAuth } from "@/context/auth-context"
-import { LogOut, CheckCircle2, Clock } from "lucide-react"
-import CrewRouteScreen from "./crew-route-screen"
-import TaskExecutionScreen from "./task-execution-screen"
-import AuthenticatedRoleBoundary from "./authenticated-role-boundary"
 import { municipalAuthFailureMessage } from "@/lib/auth/client"
 
-type CrewScreen = "dashboard" | "route" | "task-execution" | "completion-camera"
-
-export default function CrewTaskList() {
-  return (
-    <AuthenticatedRoleBoundary role="Crew">
-      <CrewTaskListContent />
-    </AuthenticatedRoleBoundary>
-  )
-}
-
-function CrewTaskListContent() {
-  const router = useRouter()
-  const { signOut, user } = useAuth()
-  const [currentScreen, setCurrentScreen] = useState<CrewScreen>("dashboard")
-  const [shiftStarted, setShiftStarted] = useState(false)
-  const [isSigningOut, setIsSigningOut] = useState(false)
-  const [logoutError, setLogoutError] = useState<string | null>(null)
-
-  const handleSignOut = async () => {
-    if (isSigningOut) return
-    setIsSigningOut(true)
-    setLogoutError(null)
-    const result = await signOut()
-    if (!result.ok) {
-      setLogoutError(municipalAuthFailureMessage(result))
-      setIsSigningOut(false)
-      return
-    }
-    router.replace("/auth")
-    router.refresh()
-  }
-
-  const handleTaskClick = () => {
-    setCurrentScreen("task-execution")
-  }
-
-  const handleTaskComplete = () => {
-    setCurrentScreen("completion-camera")
-  }
-
-  const handleStartShift = () => {
-    setShiftStarted(true)
-    setTimeout(() => {
-      setCurrentScreen("route")
-    }, 1500)
-  }
-
-  if (currentScreen === "route") {
-    return <CrewRouteScreen onTaskClick={handleTaskClick} />
-  }
-
-  if (currentScreen === "task-execution") {
-    return <TaskExecutionScreen onComplete={handleTaskComplete} onBack={() => setCurrentScreen("route")} />
-  }
-
-  if (currentScreen === "completion-camera") {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold mb-4">Completion Camera Screen</h1>
-          <p className="text-slate-400 mb-8">Coming next...</p>
-          <Button onClick={() => setCurrentScreen("dashboard")} className="bg-blue-600 hover:bg-blue-700">
-            Back to Dashboard
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="px-6 py-6">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Field Tasks</h1>
-            <p className="text-muted-foreground">Welcome, {user?.name ?? "Crew Member"}</p>
-          </div>
-          <button
-            onClick={handleSignOut}
-            disabled={isSigningOut}
-            className="p-2 hover:bg-accent rounded-lg transition-colors"
-            title="Logout"
-          >
-            <LogOut className="h-5 w-5 text-muted-foreground hover:text-foreground" />
-          </button>
-        </div>
-        {logoutError && <p role="alert" className="mb-4 text-sm text-red-600">{logoutError}</p>}
-
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
-          <Card className="p-6 bg-card border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-muted-foreground text-sm font-medium">Tasks Today</p>
-                <p className="text-3xl font-bold text-foreground mt-2">7</p>
-              </div>
-              <Clock className="h-8 w-8 text-orange-500" />
-            </div>
-          </Card>
-
-          <Card className="p-6 bg-card border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-muted-foreground text-sm font-medium">Completed</p>
-                <p className="text-3xl font-bold text-foreground mt-2">5</p>
-              </div>
-              <CheckCircle2 className="h-8 w-8 text-green-500" />
-            </div>
-          </Card>
-        </div>
-
-        <Card className="p-6 bg-card border-border">
-          <h2 className="text-xl font-bold text-foreground mb-4">Today&apos;s Shift</h2>
-          <p className="text-muted-foreground mb-6">
-            {shiftStarted ? "Syncing with server..." : "Start your shift to view and complete tasks."}
-          </p>
-          <Button
-            onClick={handleStartShift}
-            disabled={shiftStarted}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
-            {shiftStarted ? "Syncing..." : "Start Shift"}
-          </Button>
-        </Card>
-      </div>
-    </div>
-  )
+type Order = { id: string; title: string; description: string; priority: string; status: string; report: { title: string; district: { name: string } }; evidence: { id: string; name: string; url: string }[]; history: { note: string | null }[] }
+async function api<T>(path: string, init?: RequestInit): Promise<T> { const r = await fetch(path, { credentials: "same-origin", cache: "no-store", ...init, headers: { ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers } }); if (!r.ok) throw new Error("request"); return r.json() as Promise<T> }
+const label = (v: string) => v.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase())
+export default function CrewTaskList() { return <AuthenticatedRoleBoundary role="Crew"><Crew /></AuthenticatedRoleBoundary> }
+function Crew() {
+  const router = useRouter(); const { user, signOut } = useAuth(); const [orders, setOrders] = useState<Order[]>([]); const [selected, setSelected] = useState<Order | null>(null); const [note, setNote] = useState(""); const [file, setFile] = useState<File | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false)
+  const load = useCallback(async () => { try { const data = await api<{ workOrders: Order[] }>("/api/crew/work-orders"); setOrders(data.workOrders); setSelected((current) => current ? data.workOrders.find((o) => o.id === current.id) ?? null : null) } catch { setError("Assigned work orders are unavailable. Please retry.") } }, [])
+  useEffect(() => { const timer = window.setTimeout(() => { void load() }, 0); return () => window.clearTimeout(timer) }, [load])
+  const update = async (status: "active" | "completed") => { if (!selected || busy) return; setBusy(true); setError(""); try { await api(`/api/crew/work-orders/${selected.id}`, { method: "PATCH", body: JSON.stringify({ status, note: note.trim() || undefined }) }); setNote(""); await load() } catch { setError(status === "completed" ? "Start this task before submitting completion." : "Unable to update the task.") } finally { setBusy(false) } }
+  const upload = async () => { if (!selected || !file || busy) return; setBusy(true); try { const form = new FormData(); form.set("image", file); const r = await fetch(`/api/crew/work-orders/${selected.id}/evidence`, { method: "POST", credentials: "same-origin", body: form }); if (!r.ok) throw new Error("upload"); setFile(null); await load() } catch { setError("Evidence upload failed. Select a valid image and try again.") } finally { setBusy(false) } }
+  return <div className="min-h-screen bg-slate-950 p-6 text-white"><div className="mx-auto max-w-5xl"><header className="mb-8 flex items-center justify-between"><div><h1 className="text-3xl font-bold">Field Tasks</h1><p className="text-slate-400">Welcome, {user?.name ?? "Crew Member"}</p></div><Button variant="outline" onClick={async () => { const result = await signOut(); if (result.ok) { router.replace("/auth"); router.refresh() } else setError(municipalAuthFailureMessage(result)) }}><LogOut size={16}/>Logout</Button></header>{error && <p role="alert" className="mb-4 rounded bg-red-950 p-3 text-red-200">{error}</p>}<div className="mb-6 grid gap-4 md:grid-cols-2"><Card className="bg-slate-900 p-5 text-white"><Clock className="float-right text-orange-400"/><p className="text-slate-400">Assigned tasks</p><p className="text-3xl font-bold">{orders.length}</p></Card><Card className="bg-slate-900 p-5 text-white"><CheckCircle2 className="float-right text-green-400"/><p className="text-slate-400">Completed</p><p className="text-3xl font-bold">{orders.filter((o) => o.status === "completed").length}</p></Card></div><div className="grid gap-6 lg:grid-cols-2"><div className="space-y-3">{orders.map((o) => <button key={o.id} onClick={() => setSelected(o)} className={`w-full rounded-lg border p-4 text-left ${selected?.id === o.id ? "border-blue-400 bg-slate-800" : "border-slate-700 bg-slate-900"}`}><b>{o.title}</b><span className="float-right text-sm">{label(o.status)}</span><p className="mt-1 text-sm text-slate-400">{o.report.title} · {o.report.district.name}</p></button>)}{orders.length === 0 && <Card className="bg-slate-900 p-5 text-slate-300">No work orders assigned.</Card>}</div><Card className="bg-slate-900 p-5 text-white">{selected ? <div className="space-y-4"><div><h2 className="text-xl font-bold">{selected.title}</h2><p className="text-slate-400">{selected.description}</p></div><textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} placeholder="Progress or completion notes" className="min-h-24 w-full rounded border border-slate-700 bg-slate-950 p-3 text-white"/>{selected.status === "pending" && <Button disabled={busy} onClick={() => void update("active")}>Start work</Button>}{selected.status === "active" && <Button disabled={busy} onClick={() => void update("completed")}>Submit completed work</Button>}<div className="border-t border-slate-700 pt-4"><label className="block text-sm">Completion evidence</label><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/><Button className="mt-2" variant="outline" disabled={!file || busy} onClick={() => void upload()}><Upload size={16}/>Upload evidence</Button>{selected.evidence.map((e) => <a className="ml-3 text-sm text-blue-300 underline" key={e.id} href={e.url} target="_blank" rel="noreferrer">{e.name}</a>)}</div><p className="text-sm text-slate-400">Latest update: {selected.history.at(-1)?.note ?? "No note yet"}</p></div> : <p className="text-slate-400">Select a task to begin.</p>}</Card></div></div></div>
 }
