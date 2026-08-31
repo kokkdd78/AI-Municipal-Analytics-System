@@ -1,4 +1,5 @@
-export const MAX_REPORT_IMAGE_BYTES = 5 * 1024 * 1024
+// Keep multipart uploads below Vercel Functions' fixed 4.5 MB request limit.
+export const MAX_REPORT_IMAGE_BYTES = 4 * 1024 * 1024
 
 export const REPORT_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const
 export type ReportImageMimeType = (typeof REPORT_IMAGE_MIME_TYPES)[number]

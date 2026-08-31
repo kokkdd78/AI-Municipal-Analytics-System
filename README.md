@@ -100,7 +100,7 @@ Copy-Item .env.example .env
 | `BETTER_AUTH_SECRET` | High-entropy Better Auth signing secret. |
 | `BETTER_AUTH_URL` | Exact public application origin. Local development normally uses the local application origin. |
 | `BETTER_AUTH_TRUSTED_ORIGINS` | Comma-separated exact origins permitted for authenticated mutations. |
-| `AUTH_TRUSTED_PROXY_CIDRS` | Production-only trusted reverse-proxy IP/CIDR list. Local development and tests may leave it blank. |
+| `AUTH_TRUSTED_PROXY_CIDRS` | Trusted reverse-proxy IP/CIDR list for non-Vercel production. Leave it unset for a direct Vercel deployment with system environment variables enabled. |
 | `CLOUDINARY_CLOUD_NAME` | Server-only Cloudinary account name. |
 | `CLOUDINARY_API_KEY` | Server-only Cloudinary API key. |
 | `CLOUDINARY_API_SECRET` | Server-only Cloudinary API secret. |
@@ -148,7 +148,7 @@ npm.cmd run build
 npm.cmd start
 ```
 
-Production mode requires HTTPS-compatible Better Auth origins and trusted-proxy configuration appropriate to the deployment topology.
+Production mode requires HTTPS-compatible Better Auth origins. Non-Vercel deployments also require trusted-proxy CIDRs; direct Vercel deployments use Vercel's sanitized single `X-Forwarded-For` value and must keep system environment variables enabled.
 
 ## Demonstration workflow
 

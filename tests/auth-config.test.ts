@@ -75,6 +75,26 @@ describe("authentication environment", () => {
     },
   )
 
+  it("uses Vercel's sanitized single forwarded IP without invented proxy CIDRs", () => {
+    expect(
+      readAuthRuntimeEnvironment(
+        productionEnvironment({ AUTH_TRUSTED_PROXY_CIDRS: undefined, VERCEL: "1" }),
+      ),
+    ).toMatchObject({
+      baseURL: TEST_ORIGIN,
+      trustedProxyCidrs: [],
+      secureCookies: true,
+    })
+  })
+
+  it("does not accept a non-Vercel production deployment without trusted proxy CIDRs", () => {
+    expect(() =>
+      readAuthRuntimeEnvironment(
+        productionEnvironment({ AUTH_TRUSTED_PROXY_CIDRS: undefined, VERCEL: "0" }),
+      ),
+    ).toThrow("The authentication environment configuration is invalid")
+  })
+
   it.each(["development", "test"])("allows localhost HTTP in %s", (nodeEnvironment) => {
     expect(
       readAuthRuntimeEnvironment({

@@ -78,7 +78,7 @@ export default function ReportFormModal({ onClose }: ReportFormModalProps) {
       return
     }
     if (file.size <= 0 || file.size > MAX_REPORT_IMAGE_BYTES) {
-      toast({ title: "Image Too Large", description: "Choose an image up to 5 MB.", variant: "destructive" })
+      toast({ title: "Image Too Large", description: "Choose an image up to 4 MB.", variant: "destructive" })
       return
     }
     if (uploadedPhoto?.startsWith("blob:")) URL.revokeObjectURL(uploadedPhoto)

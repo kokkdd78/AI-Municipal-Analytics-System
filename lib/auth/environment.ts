@@ -14,6 +14,7 @@ type AuthEnvironmentSource = Partial<
     | "BETTER_AUTH_URL"
     | "BETTER_AUTH_TRUSTED_ORIGINS"
     | "AUTH_TRUSTED_PROXY_CIDRS"
+    | "VERCEL"
     | "NODE_ENV",
     string | undefined
   >
@@ -81,10 +82,16 @@ function validProxyAddress(value: string): boolean {
   return prefixLength <= (addressFamily === 4 ? 32 : 128)
 }
 
-function parseTrustedProxyCidrs(value: string | undefined, production: boolean): string[] {
+function parseTrustedProxyCidrs(
+  value: string | undefined,
+  production: boolean,
+  vercel: boolean,
+): string[] {
   const rawValue = value?.trim()
   if (!rawValue) {
-    if (production) invalidConfiguration()
+    // Direct Vercel deployments overwrite X-Forwarded-For with one client IP.
+    // Better Auth accepts only a single valid address when trustedProxies is empty.
+    if (production && !vercel) invalidConfiguration()
     return []
   }
 
@@ -105,7 +112,11 @@ export function readAuthRuntimeEnvironment(
   const trustedOrigins = [
     ...new Set(rawOrigins.split(",").map((value) => parseExactOrigin(value.trim(), production))),
   ]
-  const trustedProxyCidrs = parseTrustedProxyCidrs(environment.AUTH_TRUSTED_PROXY_CIDRS, production)
+  const trustedProxyCidrs = parseTrustedProxyCidrs(
+    environment.AUTH_TRUSTED_PROXY_CIDRS,
+    production,
+    environment.VERCEL === "1",
+  )
 
   if (trustedOrigins.length === 0 || !trustedOrigins.includes(baseURL)) invalidConfiguration()
 

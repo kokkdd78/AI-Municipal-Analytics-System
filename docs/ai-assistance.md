@@ -38,7 +38,7 @@ An assistance image is optional. The current assistance contract accepts only:
 - WebP (`image/webp`)
 - at most 1,000,000 decoded bytes
 
-The server validates the data URL, declared type, decoded size, and file signature before sending the image inline to Gemini. This AI-specific limit is separate from the 5 MiB report-image upload limit used by the Cloudinary report attachment route.
+The server validates the data URL, declared type, decoded size, and file signature before sending the image inline to Gemini. This AI-specific limit is separate from the 4 MiB report-image upload limit used by the Cloudinary report attachment route.
 
 ## Privacy and data minimization
 

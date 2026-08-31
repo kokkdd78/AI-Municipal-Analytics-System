@@ -83,7 +83,7 @@ function ReportPageContent() {
       return
     }
     if (file.size <= 0 || file.size > MAX_REPORT_IMAGE_BYTES) {
-      toast({ title: "Image Too Large", description: "Choose an image up to 5 MB.", variant: "destructive" })
+      toast({ title: "Image Too Large", description: "Choose an image up to 4 MB.", variant: "destructive" })
       return
     }
     if (uploadedImage?.startsWith("blob:")) URL.revokeObjectURL(uploadedImage)
@@ -333,7 +333,7 @@ function ReportPageContent() {
                 <>
                   <Camera className="h-8 w-8 text-primary mx-auto mb-2" />
                   <p className="text-sm font-medium text-foreground">Click or drag photo here</p>
-                  <p className="text-xs text-muted-foreground mt-1">JPEG, PNG, or WebP up to 5 MB</p>
+                  <p className="text-xs text-muted-foreground mt-1">JPEG, PNG, or WebP up to 4 MB</p>
                 </>
               )}
             </label>

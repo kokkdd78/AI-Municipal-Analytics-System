@@ -31,7 +31,7 @@ Nominatim is a geographic lookup service, not an authoritative cadastral boundar
 - Crew completion-evidence images; and
 - canonical ECM JSON packages as raw documents.
 
-The application validates supported image types and sizes before upload. Report photos accept JPEG, PNG, or WebP up to 5 MiB. AI inline images have the stricter 1,000,000-byte limit described in [ai-assistance.md](ai-assistance.md). ECM packages are uploaded as raw JSON, read back, and SHA-256 verified before archive metadata is committed.
+The application validates supported image types and sizes before upload. Report photos accept JPEG, PNG, or WebP up to 4 MiB so the complete multipart request remains below Vercel Functions' 4.5 MB payload limit. AI inline images have the stricter 1,000,000-byte limit described in [ai-assistance.md](ai-assistance.md). ECM packages are uploaded as raw JSON, read back, and SHA-256 verified before archive metadata is committed.
 
 Cloudinary credentials are server-only. PostgreSQL stores attachment metadata/URLs or archive storage metadata; it does not store the image or raw document bytes.
 
