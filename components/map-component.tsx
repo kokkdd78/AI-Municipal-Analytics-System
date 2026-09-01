@@ -6,7 +6,7 @@ import L from "leaflet"
 import "leaflet.heat"
 import { Button } from "@/components/ui/button"
 import { ThumbsUp } from "lucide-react"
-import { getReportPhotoUrl } from "@/lib/report-utils"
+import { formatReportStatus, getReportPhotoUrl } from "@/lib/report-utils"
 import type { MapReport, Suggestion } from "@/types/domain"
 import Image from "next/image"
 
@@ -29,6 +29,7 @@ interface MapComponentProps {
   pendingReports?: Set<string>
   votedSuggestions?: Set<string>
   pendingSuggestions?: Set<string>
+  showReportStatus?: boolean
 }
 
 function CenterTracker({ onCenterChange }: { onCenterChange?: (lat: number, lng: number) => void }) {
@@ -111,6 +112,7 @@ export default function MapComponent({
   pendingReports = new Set(),
   votedSuggestions = new Set(),
   pendingSuggestions = new Set(),
+  showReportStatus = false,
 }: MapComponentProps) {
   useEffect(() => {
     // @ts-expect-error Leaflet keeps this internal icon URL helper off its public types.
@@ -203,6 +205,11 @@ export default function MapComponent({
                 <div>
                   <p className="font-semibold text-sm">{report.title}</p>
                   <p className="text-xs text-muted-foreground line-clamp-2">{report.description}</p>
+                  {showReportStatus && report.status && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Status: <span className="font-medium text-foreground">{formatReportStatus(report.status)}</span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center justify-between pt-2">
                   <span className="text-xs font-medium text-muted-foreground">{report.votes} votes</span>

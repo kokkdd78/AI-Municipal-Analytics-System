@@ -11,6 +11,7 @@ describe("canonical report helpers", () => {
   it("formats and maps every report status", () => {
     expect(formatReportStatus("pending")).toBe("Pending")
     expect(formatReportStatus("in-progress")).toBe("In Progress")
+    expect(formatReportStatus("resolved")).toBe("Resolved")
     expect(reportStatusStep("pending")).toBe(0)
     expect(reportStatusStep("in-progress")).toBe(2)
     expect(reportStatusStep("resolved")).toBe(3)

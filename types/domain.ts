@@ -73,6 +73,7 @@ export interface MapReport {
   id: string
   title: string
   description?: string
+  status?: ReportStatus
   location: Coordinates
   votes: number
   attachments?: Attachment[]
