@@ -4,6 +4,7 @@ import {
   CATEGORY_CHART_FILL,
   GENERAL_DASHBOARD_COLOR,
   getDashboardKpiColor,
+  getDashboardKpiLabel,
   getReportStatusColor,
 } from "../lib/operations/dashboard-colors"
 
@@ -40,5 +41,23 @@ describe("Manager dashboard semantic colors", () => {
     expect(CATEGORY_CHART_FILL).not.toBe(getReportStatusColor("pending").chartFill)
     expect(CATEGORY_CHART_FILL).not.toBe(getReportStatusColor("in-progress").chartFill)
     expect(CATEGORY_CHART_FILL).not.toBe(getReportStatusColor("resolved").chartFill)
+  })
+
+  it("presents readable KPI labels without renaming canonical keys", () => {
+    expect([
+      "totalReports",
+      "pending",
+      "inProgress",
+      "resolved",
+      "activeWorkOrders",
+      "completedWorkOrders",
+    ].map(getDashboardKpiLabel)).toEqual([
+      "Total Reports",
+      "Pending",
+      "In Progress",
+      "Resolved",
+      "Active Work Orders",
+      "Completed Work Orders",
+    ])
   })
 })

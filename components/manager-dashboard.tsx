@@ -14,6 +14,7 @@ import { municipalAuthFailureMessage } from "@/lib/auth/client"
 import {
   CATEGORY_CHART_FILL,
   getDashboardKpiColor,
+  getDashboardKpiLabel,
   getReportStatusColor,
 } from "@/lib/operations/dashboard-colors"
 import { toManagerDashboardMapReports } from "@/lib/operations/dashboard-map"
@@ -72,7 +73,7 @@ function DashboardView({ data, loading, filters, setFilters }: { data: Dashboard
           const color = getDashboardKpiColor(name)
           return (
             <Card key={name} className={cn("p-4", color.cardClass)}>
-              <p className={cn("text-xs", color.labelClass)}>{title(name)}</p>
+              <p className={cn("text-xs", color.labelClass)}>{getDashboardKpiLabel(name)}</p>
               <p className={cn("text-2xl font-bold", color.valueClass)}>{value}</p>
             </Card>
           )

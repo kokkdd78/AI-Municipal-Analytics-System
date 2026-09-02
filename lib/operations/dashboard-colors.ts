@@ -48,6 +48,15 @@ const KPI_STATUS_COLORS: Record<string, DashboardSemanticColor> = {
   completedWorkOrders: REPORT_STATUS_COLORS.resolved,
 }
 
+const KPI_LABELS: Record<string, string> = {
+  totalReports: "Total Reports",
+  pending: "Pending",
+  inProgress: "In Progress",
+  resolved: "Resolved",
+  activeWorkOrders: "Active Work Orders",
+  completedWorkOrders: "Completed Work Orders",
+}
+
 export const CATEGORY_CHART_FILL = GENERAL_DASHBOARD_COLOR.chartFill
 
 export function getReportStatusColor(status: ReportStatus): DashboardSemanticColor {
@@ -56,4 +65,8 @@ export function getReportStatusColor(status: ReportStatus): DashboardSemanticCol
 
 export function getDashboardKpiColor(name: string): DashboardSemanticColor {
   return KPI_STATUS_COLORS[name] ?? GENERAL_DASHBOARD_COLOR
+}
+
+export function getDashboardKpiLabel(name: string): string {
+  return KPI_LABELS[name] ?? name
 }
