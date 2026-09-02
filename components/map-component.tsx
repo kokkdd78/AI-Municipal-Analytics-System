@@ -6,10 +6,8 @@ import L from "leaflet"
 import "leaflet.heat"
 import { Button } from "@/components/ui/button"
 import { ThumbsUp } from "lucide-react"
-import { getReportPhotoUrl } from "@/lib/report-utils"
 import type { MapReport, Suggestion } from "@/types/domain"
-import Image from "next/image"
-import ReportMapStatus from "@/components/report-map-status"
+import MapReportMarkers from "@/components/map-report-markers"
 
 // Fix for default marker icons
 const iconRetinaUrl = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png"
@@ -179,56 +177,15 @@ export default function MapComponent({
 
         <HeatmapLayer reports={reports} />
 
-        {reports.map((report) => {
-          const photoUrl = report.attachments ? getReportPhotoUrl({ attachments: report.attachments }) : null
-
-          return (
-          <Marker
-            key={`report-${report.id}`}
-            position={[report.location.lat, report.location.lng]}
-            icon={getMarkerIcon(report.votes)}
-            eventHandlers={{ click: () => onReportSelect?.(report.id) }}
-          >
-            <Popup className="min-w-[200px]">
-              <div className="space-y-2">
-                {photoUrl && (
-                  <div className="w-full h-32 rounded-md overflow-hidden mb-2">
-                    <Image
-                      src={photoUrl}
-                      alt={report.title}
-                      width={400}
-                      height={256}
-                      unoptimized
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-                <div>
-                  <p className="font-semibold text-sm">{report.title}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2">{report.description}</p>
-                  {showReportStatus && report.status && <ReportMapStatus status={report.status} />}
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-xs font-medium text-muted-foreground">{report.votes} votes</span>
-                  <Button
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    disabled={votedReports.has(report.id) || pendingReports.has(report.id)}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onPinClick?.(report.id, "report")
-                    }}
-                  >
-                    <ThumbsUp className="h-3 w-3 mr-1" />{
-                      pendingReports.has(report.id) ? "Voting…" : votedReports.has(report.id) ? "Voted" : "Upvote"
-                    }
-                  </Button>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-          )
-        })}
+        <MapReportMarkers
+          reports={reports}
+          markerIcon={getMarkerIcon}
+          onPinClick={onPinClick}
+          onReportSelect={onReportSelect}
+          pendingReports={pendingReports}
+          showReportStatus={showReportStatus}
+          votedReports={votedReports}
+        />
 
         {suggestionsVisible &&
           suggestions.map((suggestion) => (
