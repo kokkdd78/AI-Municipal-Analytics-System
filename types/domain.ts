@@ -74,6 +74,7 @@ export interface MapReport {
   title: string
   description?: string
   status?: ReportStatus
+  districtLabel?: string
   location: Coordinates
   votes: number
   attachments?: Attachment[]
