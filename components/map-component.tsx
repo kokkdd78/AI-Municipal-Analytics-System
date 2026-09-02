@@ -6,9 +6,10 @@ import L from "leaflet"
 import "leaflet.heat"
 import { Button } from "@/components/ui/button"
 import { ThumbsUp } from "lucide-react"
-import { formatReportStatus, getReportPhotoUrl } from "@/lib/report-utils"
+import { getReportPhotoUrl } from "@/lib/report-utils"
 import type { MapReport, Suggestion } from "@/types/domain"
 import Image from "next/image"
+import ReportMapStatus from "@/components/report-map-status"
 
 // Fix for default marker icons
 const iconRetinaUrl = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png"
@@ -205,11 +206,7 @@ export default function MapComponent({
                 <div>
                   <p className="font-semibold text-sm">{report.title}</p>
                   <p className="text-xs text-muted-foreground line-clamp-2">{report.description}</p>
-                  {showReportStatus && report.status && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Status: <span className="font-medium text-foreground">{formatReportStatus(report.status)}</span>
-                    </p>
-                  )}
+                  {showReportStatus && report.status && <ReportMapStatus status={report.status} />}
                 </div>
                 <div className="flex items-center justify-between pt-2">
                   <span className="text-xs font-medium text-muted-foreground">{report.votes} votes</span>
